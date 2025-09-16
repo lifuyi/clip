@@ -5,13 +5,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>MyClipy</string>
+	<string>Clipy</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.example.MyClipy</string>
+	<string>com.example.Clipy</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>MyClipy</string>
+	<string>Clipy</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
