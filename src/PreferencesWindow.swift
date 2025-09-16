@@ -1,108 +1,288 @@
 import Foundation
 import Cocoa
 
-// Simple preferences window for basic settings
+// Simple programmatic preferences window
 class PreferencesWindowController: NSWindowController {
     
-    @IBOutlet weak var maxHistorySizeField: NSTextField!
-    @IBOutlet weak var soundEffectCheckbox: NSButton!
-    @IBOutlet weak var soundEffectTypePopup: NSPopUpButton!
-    @IBOutlet weak var showImageCheckbox: NSButton!
-    @IBOutlet weak var colorPreviewCheckbox: NSButton!
-    @IBOutlet weak var numericKeysCheckbox: NSButton!
-    @IBOutlet weak var launchAtLoginCheckbox: NSButton!
-    @IBOutlet weak var timeIntervalSlider: NSSlider!
-    @IBOutlet weak var timeIntervalLabel: NSTextField!
+    private var maxHistorySizeField: NSTextField!
+    private var maxMenuItemTitleLengthField: NSTextField!
+    private var maxSnippetsField: NSTextField!
+    private var soundEffectCheckbox: NSButton!
+    private var showImageCheckbox: NSButton!
+    private var colorPreviewCheckbox: NSButton!
+    private var numericKeysCheckbox: NSButton!
+    private var launchAtLoginCheckbox: NSButton!
+    private var timeIntervalSlider: NSSlider!
+    private var timeIntervalLabel: NSTextField!
     
-    override func windowDidLoad() {
-        super.windowDidLoad()
-        setupWindow()
+    init() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
+                             styleMask: [.titled, .closable],
+                             backing: .buffered,
+                             defer: false)
+        window.title = "Clipy Preferences"
+        window.center()
+        super.init(window: window)
+        setupUI()
         loadPreferences()
     }
     
-    private func setupWindow() {
-        window?.title = "Preferences"
-        window?.styleMask = [.titled, .closable]
-        window?.isRestorable = false
-        window?.center()
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    private func setupUI() {
+        guard let contentView = window?.contentView else { return }
+        
+        // Main scroll view for better handling of content
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        
+        contentView.addSubview(scrollView)
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+        ])
+        
+        // Content view for scroll view
+        let contentScrollView = NSView()
+        contentScrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = contentScrollView
+        
+        NSLayoutConstraint.activate([
+            contentScrollView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            contentScrollView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            contentScrollView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+            contentScrollView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            contentScrollView.widthAnchor.constraint(equalTo: scrollView.widthAnchor)
+        ])
+        
+        // Main stack view
+        let stackView = NSStackView()
+        stackView.orientation = .vertical
+        stackView.alignment = .leading
+        stackView.spacing = 15
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        
+        contentScrollView.addSubview(stackView)
+        NSLayoutConstraint.activate([
+            stackView.topAnchor.constraint(equalTo: contentScrollView.topAnchor, constant: 20),
+            stackView.leadingAnchor.constraint(equalTo: contentScrollView.leadingAnchor, constant: 20),
+            stackView.trailingAnchor.constraint(equalTo: contentScrollView.trailingAnchor, constant: -20),
+            stackView.bottomAnchor.constraint(lessThanOrEqualTo: contentScrollView.bottomAnchor, constant: -20)
+        ])
+        
+        // Title
+        let titleLabel = NSTextField(labelWithString: "Clipy Preferences")
+        titleLabel.font = NSFont.boldSystemFont(ofSize: 16)
+        stackView.addArrangedSubview(titleLabel)
+        
+        // History Settings Section
+        let historyLabel = NSTextField(labelWithString: "History Settings")
+        historyLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        stackView.addArrangedSubview(historyLabel)
+        
+        // Max History Size
+        let historySizeView = createLabeledField("Maximum History Size:", width: 180)
+        maxHistorySizeField = historySizeView.field
+        maxHistorySizeField.target = self
+        maxHistorySizeField.action = #selector(maxHistorySizeChanged(_:))
+        stackView.addArrangedSubview(historySizeView.container)
+        
+        // Menu Item Title Length
+        let titleLengthView = createLabeledField("Menu Title Length:", width: 180)
+        maxMenuItemTitleLengthField = titleLengthView.field
+        maxMenuItemTitleLengthField.target = self
+        maxMenuItemTitleLengthField.action = #selector(maxMenuItemTitleLengthChanged(_:))
+        stackView.addArrangedSubview(titleLengthView.container)
+        
+        // Max Snippets
+        let maxSnippetsView = createLabeledField("Maximum Snippets:", width: 180)
+        maxSnippetsField = maxSnippetsView.field
+        maxSnippetsField.target = self
+        maxSnippetsField.action = #selector(maxSnippetsChanged(_:))
+        stackView.addArrangedSubview(maxSnippetsView.container)
+        
+        // Display Options Section
+        let displayLabel = NSTextField(labelWithString: "Display Options")
+        displayLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        stackView.addArrangedSubview(displayLabel)
+        
+        // Checkboxes with proper spacing
+        showImageCheckbox = NSButton(checkboxWithTitle: "Show images in menu", target: self, action: #selector(showImageToggled(_:)))
+        stackView.addArrangedSubview(showImageCheckbox)
+        
+        colorPreviewCheckbox = NSButton(checkboxWithTitle: "Show color preview in menu", target: self, action: #selector(colorPreviewToggled(_:)))
+        stackView.addArrangedSubview(colorPreviewCheckbox)
+        
+        numericKeysCheckbox = NSButton(checkboxWithTitle: "Enable numeric shortcuts (0-9)", target: self, action: #selector(numericKeysToggled(_:)))
+        stackView.addArrangedSubview(numericKeysCheckbox)
+        
+        // Sound Settings Section
+        let soundLabel = NSTextField(labelWithString: "Sound Settings")
+        soundLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        stackView.addArrangedSubview(soundLabel)
+        
+        soundEffectCheckbox = NSButton(checkboxWithTitle: "Enable sound effects", target: self, action: #selector(soundEffectToggled(_:)))
+        stackView.addArrangedSubview(soundEffectCheckbox)
+        
+        // Timing Settings Section
+        let timingLabel = NSTextField(labelWithString: "Timing Settings")
+        timingLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        stackView.addArrangedSubview(timingLabel)
+        
+        // Time Interval
+        let intervalView = createSliderField("Check Interval (seconds):", width: 180)
+        timeIntervalSlider = intervalView.slider
+        timeIntervalLabel = intervalView.label
+        timeIntervalSlider.target = self
+        timeIntervalSlider.action = #selector(timeIntervalChanged(_:))
+        stackView.addArrangedSubview(intervalView.container)
+        
+        // Launch at Login Section
+        let loginLabel = NSTextField(labelWithString: "Startup Settings")
+        loginLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        stackView.addArrangedSubview(loginLabel)
+        
+        launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch at login", target: self, action: #selector(launchAtLoginToggled(_:)))
+        stackView.addArrangedSubview(launchAtLoginCheckbox)
+        
+        // Reset Button
+        let resetButton = NSButton(title: "Reset to Defaults", target: self, action: #selector(resetToDefaults(_:)))
+        resetButton.bezelStyle = .rounded
+        stackView.addArrangedSubview(resetButton)
+    }
+    
+    private func createLabeledField(_ label: String, width: CGFloat) -> (container: NSView, field: NSTextField) {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.heightAnchor.constraint(greaterThanOrEqualToConstant: 30).isActive = true
+        
+        let labelField = NSTextField(labelWithString: label)
+        labelField.translatesAutoresizingMaskIntoConstraints = false
+        
+        let textField = NSTextField()
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        textField.stringValue = "20"
+        
+        container.addSubview(labelField)
+        container.addSubview(textField)
+        
+        NSLayoutConstraint.activate([
+            labelField.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            labelField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            labelField.widthAnchor.constraint(equalToConstant: width),
+            textField.leadingAnchor.constraint(equalTo: labelField.trailingAnchor, constant: 10),
+            textField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            textField.widthAnchor.constraint(equalToConstant: 60)
+        ])
+        
+        return (container, textField)
+    }
+    
+    private func createSliderField(_ label: String, width: CGFloat) -> (container: NSView, slider: NSSlider, label: NSTextField) {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.heightAnchor.constraint(greaterThanOrEqualToConstant: 40).isActive = true
+        
+        let labelField = NSTextField(labelWithString: label)
+        labelField.translatesAutoresizingMaskIntoConstraints = false
+        
+        let slider = NSSlider(value: 0.5, minValue: 0.1, maxValue: 2.0, target: nil, action: nil)
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        
+        let valueLabel = NSTextField(labelWithString: "0.5")
+        valueLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        container.addSubview(labelField)
+        container.addSubview(slider)
+        container.addSubview(valueLabel)
+        
+        NSLayoutConstraint.activate([
+            labelField.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            labelField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            labelField.widthAnchor.constraint(equalToConstant: width),
+            slider.leadingAnchor.constraint(equalTo: labelField.trailingAnchor, constant: 10),
+            slider.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            slider.widthAnchor.constraint(equalToConstant: 120),
+            valueLabel.leadingAnchor.constraint(equalTo: slider.trailingAnchor, constant: 10),
+            valueLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            valueLabel.widthAnchor.constraint(equalToConstant: 40)
+        ])
+        
+        return (container, slider, valueLabel)
     }
     
     private func loadPreferences() {
         let defaults = UserDefaults.standard
         
         maxHistorySizeField.integerValue = defaults.integer(forKey: Constants.UserDefaults.maxHistorySize)
-        soundEffectCheckbox.state = defaults.bool(forKey: Constants.UserDefaults.soundEffectEnabled) ? .on : .off
+        if maxHistorySizeField.integerValue == 0 {
+            maxHistorySizeField.integerValue = 20
+        }
         
-        // Setup sound effect type popup
-        setupSoundEffectPopup()
-        loadSoundEffectType()
-        
+        // Note: These keys might not exist yet, so we'll add basic ones
         showImageCheckbox.state = defaults.bool(forKey: Constants.UserDefaults.showImageInTheMenu) ? .on : .off
         colorPreviewCheckbox.state = defaults.bool(forKey: Constants.UserDefaults.showColorPreviewInMenu) ? .on : .off
         numericKeysCheckbox.state = defaults.bool(forKey: Constants.UserDefaults.addNumericKeyEquivalents) ? .on : .off
+        soundEffectCheckbox.state = defaults.bool(forKey: Constants.UserDefaults.soundEffectEnabled) ? .on : .off
         launchAtLoginCheckbox.state = defaults.bool(forKey: Constants.UserDefaults.loginItem) ? .on : .off
         
         let timeInterval = defaults.double(forKey: Constants.UserDefaults.timeInterval)
-        timeIntervalSlider.doubleValue = timeInterval
-        timeIntervalLabel.stringValue = String(format: "%.1f seconds", timeInterval)
+        timeIntervalSlider?.doubleValue = timeInterval > 0 ? timeInterval : 0.5
+        timeIntervalLabel?.stringValue = String(format: "%.1f", timeIntervalSlider?.doubleValue ?? 0.5)
     }
     
-    @IBAction func maxHistorySizeChanged(_ sender: NSTextField) {
+    @objc private func maxHistorySizeChanged(_ sender: NSTextField) {
         let value = max(1, min(200, sender.integerValue))
         sender.integerValue = value
         UserDefaults.standard.set(value, forKey: Constants.UserDefaults.maxHistorySize)
     }
     
-    @IBAction func soundEffectToggled(_ sender: NSButton) {
-        let isEnabled = sender.state == .on
-        UserDefaults.standard.set(isEnabled, forKey: Constants.UserDefaults.soundEffectEnabled)
-        
-        // Enable/disable the sound type popup based on checkbox state
-        soundEffectTypePopup.isEnabled = isEnabled
+    @objc private func maxMenuItemTitleLengthChanged(_ sender: NSTextField) {
+        let value = max(10, min(200, sender.integerValue))
+        sender.integerValue = value
+        UserDefaults.standard.set(value, forKey: Constants.UserDefaults.maxMenuItemTitleLength)
     }
     
-    @IBAction func soundEffectTypeChanged(_ sender: NSPopUpButton) {
-        guard let selectedItem = sender.selectedItem,
-              let soundType = selectedItem.representedObject as? CPYSoundEffectType else { return }
-        
-        UserDefaults.standard.set(soundType.rawValue, forKey: Constants.UserDefaults.soundEffectType)
-        
-        // Play preview of selected sound
-        ClipService.playSoundEffectPreview(soundType)
+    @objc private func maxSnippetsChanged(_ sender: NSTextField) {
+        let value = max(1, min(200, sender.integerValue))
+        sender.integerValue = value
+        UserDefaults.standard.set(value, forKey: Constants.UserDefaults.maxSnippets)
     }
     
-    @IBAction func showImageToggled(_ sender: NSButton) {
+    @objc private func showImageToggled(_ sender: NSButton) {
         UserDefaults.standard.set(sender.state == .on, forKey: Constants.UserDefaults.showImageInTheMenu)
     }
     
-    @IBAction func colorPreviewToggled(_ sender: NSButton) {
+    @objc private func colorPreviewToggled(_ sender: NSButton) {
         UserDefaults.standard.set(sender.state == .on, forKey: Constants.UserDefaults.showColorPreviewInMenu)
     }
     
-    @IBAction func numericKeysToggled(_ sender: NSButton) {
+    @objc private func numericKeysToggled(_ sender: NSButton) {
         UserDefaults.standard.set(sender.state == .on, forKey: Constants.UserDefaults.addNumericKeyEquivalents)
     }
     
-    @IBAction func launchAtLoginToggled(_ sender: NSButton) {
-        let enable = sender.state == .on
-        UserDefaults.standard.set(enable, forKey: Constants.UserDefaults.loginItem)
-        
-        if let appDelegate = NSApp.delegate as? AppDelegate {
-            appDelegate.toggleAddingToLoginItems(enable)
-        }
+    @objc private func soundEffectToggled(_ sender: NSButton) {
+        UserDefaults.standard.set(sender.state == .on, forKey: Constants.UserDefaults.soundEffectEnabled)
     }
     
-    @IBAction func timeIntervalChanged(_ sender: NSSlider) {
+    @objc private func timeIntervalChanged(_ sender: NSSlider) {
         let value = sender.doubleValue
+        timeIntervalLabel?.stringValue = String(format: "%.1f", value)
         UserDefaults.standard.set(value, forKey: Constants.UserDefaults.timeInterval)
-        timeIntervalLabel.stringValue = String(format: "%.1f seconds", value)
-        
-        // Restart monitoring with new interval
-        ClipService.shared.stopMonitoring()
-        ClipService.shared.startMonitoring()
     }
     
-    @IBAction func resetToDefaults(_ sender: NSButton) {
+    @objc private func launchAtLoginToggled(_ sender: NSButton) {
+        UserDefaults.standard.set(sender.state == .on, forKey: Constants.UserDefaults.loginItem)
+    }
+    
+    @objc private func resetToDefaults(_ sender: NSButton) {
         let alert = NSAlert()
         alert.messageText = "Reset Preferences"
         alert.informativeText = "Are you sure you want to reset all preferences to their default values?"
@@ -111,258 +291,49 @@ class PreferencesWindowController: NSWindowController {
         alert.alertStyle = .warning
         
         if alert.runModal() == .alertFirstButtonReturn {
-            resetPreferences()
+            // Reset to defaults
+            UserDefaults.standard.set(20, forKey: Constants.UserDefaults.maxHistorySize)
+            UserDefaults.standard.set(true, forKey: Constants.UserDefaults.showImageInTheMenu)
+            UserDefaults.standard.set(true, forKey: Constants.UserDefaults.showColorPreviewInMenu)
+            UserDefaults.standard.set(true, forKey: Constants.UserDefaults.addNumericKeyEquivalents)
+            UserDefaults.standard.set(true, forKey: Constants.UserDefaults.soundEffectEnabled)
+            UserDefaults.standard.set(0.5, forKey: Constants.UserDefaults.timeInterval)
+            UserDefaults.standard.set(false, forKey: Constants.UserDefaults.loginItem)
+            
+            loadPreferences()
         }
-    }
-    
-    private func resetPreferences() {
-        let defaults = UserDefaults.standard
-        
-        defaults.removeObject(forKey: Constants.UserDefaults.maxHistorySize)
-        defaults.removeObject(forKey: Constants.UserDefaults.soundEffectEnabled)
-        defaults.removeObject(forKey: Constants.UserDefaults.soundEffectType)
-        defaults.removeObject(forKey: Constants.UserDefaults.showImageInTheMenu)
-        defaults.removeObject(forKey: Constants.UserDefaults.showColorPreviewInMenu)
-        defaults.removeObject(forKey: Constants.UserDefaults.addNumericKeyEquivalents)
-        defaults.removeObject(forKey: Constants.UserDefaults.timeInterval)
-        
-        CPYUtilities.registerUserDefaultKeys()
-        loadPreferences()
-    }
-    
-    // MARK: - Sound Effect Setup
-    
-    private func setupSoundEffectPopup() {
-        soundEffectTypePopup.removeAllItems()
-        
-        for soundType in CPYSoundEffectType.allCases {
-            let menuItem = NSMenuItem(title: soundType.displayName, action: nil, keyEquivalent: "")
-            menuItem.representedObject = soundType
-            menuItem.toolTip = soundType.description
-            soundEffectTypePopup.menu?.addItem(menuItem)
-        }
-    }
-    
-    private func loadSoundEffectType() {
-        let defaults = UserDefaults.standard
-        let soundTypeString = defaults.string(forKey: Constants.UserDefaults.soundEffectType) ?? Constants.SoundEffect.pop
-        let soundType = CPYSoundEffectType(rawValue: soundTypeString) ?? .pop
-        
-        // Select the appropriate item in the popup
-        for i in 0..<soundEffectTypePopup.numberOfItems {
-            if let menuItem = soundEffectTypePopup.item(at: i),
-               let itemSoundType = menuItem.representedObject as? CPYSoundEffectType,
-               itemSoundType == soundType {
-                soundEffectTypePopup.selectItem(at: i)
-                break
-            }
-        }
-        
-        // Enable/disable popup based on checkbox state
-        soundEffectTypePopup.isEnabled = defaults.bool(forKey: Constants.UserDefaults.soundEffectEnabled)
     }
 }
 
 // Simple snippet editor window
 class SnippetEditorWindowController: NSWindowController {
     
-    @IBOutlet weak var foldersOutlineView: NSOutlineView!
-    @IBOutlet weak var snippetTitleField: NSTextField!
-    @IBOutlet weak var snippetContentTextView: NSTextView!
-    @IBOutlet weak var addFolderButton: NSButton!
-    @IBOutlet weak var addSnippetButton: NSButton!
-    @IBOutlet weak var deleteButton: NSButton!
-    
-    private var folders: [CPYFolder] = []
-    private var selectedItem: Any?
-    
-    override func windowDidLoad() {
-        super.windowDidLoad()
-        setupWindow()
-        setupOutlineView()
-        loadData()
+    init() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+                             styleMask: [.titled, .closable, .resizable],
+                             backing: .buffered,
+                             defer: false)
+        window.title = "Snippet Editor"
+        window.center()
+        super.init(window: window)
+        setupUI()
     }
     
-    private func setupWindow() {
-        window?.title = "Snippet Editor"
-        window?.setContentSize(NSSize(width: 800, height: 600))
-        window?.center()
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
     
-    private func setupOutlineView() {
-        foldersOutlineView.dataSource = self
-        foldersOutlineView.delegate = self
-        foldersOutlineView.reloadData()
-    }
-    
-    private func loadData() {
-        folders = SnippetService.shared.getAllFolders()
-        foldersOutlineView.reloadData()
+    private func setupUI() {
+        guard let contentView = window?.contentView else { return }
         
-        if !folders.isEmpty {
-            foldersOutlineView.expandItem(nil, expandChildren: true)
-        }
-    }
-    
-    @IBAction func addFolderClicked(_ sender: NSButton) {
-        let folder = SnippetService.shared.createFolder(title: "New Folder")
-        folders.append(folder)
-        foldersOutlineView.reloadData()
+        let label = NSTextField(labelWithString: "Snippet Editor - Coming Soon")
+        label.font = NSFont.boldSystemFont(ofSize: 16)
+        label.translatesAutoresizingMaskIntoConstraints = false
         
-        let index = folders.count - 1
-        foldersOutlineView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
-    }
-    
-    @IBAction func addSnippetClicked(_ sender: NSButton) {
-        guard let selectedFolder = getSelectedFolder() else {
-            showAlert("Please select a folder first.")
-            return
-        }
-        
-        let snippet = SnippetService.shared.createSnippet(in: selectedFolder, title: "New Snippet", content: "")
-        foldersOutlineView.reloadData()
-        
-        // Select the new snippet
-        if let folderIndex = folders.firstIndex(of: selectedFolder) {
-            foldersOutlineView.expandItem(selectedFolder)
-            let snippetRow = foldersOutlineView.row(forItem: snippet)
-            foldersOutlineView.selectRowIndexes(IndexSet(integer: snippetRow), byExtendingSelection: false)
-        }
-    }
-    
-    @IBAction func deleteClicked(_ sender: NSButton) {
-        guard let selectedItem = selectedItem else { return }
-        
-        let alert = NSAlert()
-        alert.messageText = "Delete Item"
-        alert.informativeText = "Are you sure you want to delete this item?"
-        alert.addButton(withTitle: "Delete")
-        alert.addButton(withTitle: "Cancel")
-        alert.alertStyle = .warning
-        
-        if alert.runModal() == .alertFirstButtonReturn {
-            if let folder = selectedItem as? CPYFolder {
-                SnippetService.shared.deleteFolder(folder)
-                folders.removeObject(folder)
-            } else if let snippet = selectedItem as? CPYSnippet,
-                      let folder = getParentFolder(for: snippet) {
-                SnippetService.shared.deleteSnippet(snippet, from: folder)
-            }
-            
-            foldersOutlineView.reloadData()
-            clearDetails()
-        }
-    }
-    
-    private func getSelectedFolder() -> CPYFolder? {
-        let selectedRow = foldersOutlineView.selectedRow
-        guard selectedRow >= 0 else { return nil }
-        
-        let item = foldersOutlineView.item(atRow: selectedRow)
-        
-        if let folder = item as? CPYFolder {
-            return folder
-        } else if let snippet = item as? CPYSnippet {
-            return getParentFolder(for: snippet)
-        }
-        
-        return nil
-    }
-    
-    private func getParentFolder(for snippet: CPYSnippet) -> CPYFolder? {
-        return folders.first { $0.snippets.contains(snippet) }
-    }
-    
-    private func clearDetails() {
-        snippetTitleField.stringValue = ""
-        snippetContentTextView.string = ""
-        selectedItem = nil
-    }
-    
-    private func showAlert(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
-    }
-}
-
-// MARK: - NSOutlineViewDataSource
-extension SnippetEditorWindowController: NSOutlineViewDataSource {
-    
-    func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
-        if item == nil {
-            return folders.count
-        } else if let folder = item as? CPYFolder {
-            return folder.snippets.count
-        }
-        return 0
-    }
-    
-    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
-        if item == nil {
-            return folders[index]
-        } else if let folder = item as? CPYFolder {
-            return folder.snippets[index]
-        }
-        return NSNull()
-    }
-    
-    func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
-        return item is CPYFolder
-    }
-}
-
-// MARK: - NSOutlineViewDelegate
-extension SnippetEditorWindowController: NSOutlineViewDelegate {
-    
-    func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
-        let identifier = NSUserInterfaceItemIdentifier("DataCell")
-        var view = outlineView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView
-        
-        if view == nil {
-            view = NSTableCellView()
-            view?.identifier = identifier
-            
-            let textField = NSTextField()
-            textField.isBordered = false
-            textField.backgroundColor = NSColor.clear
-            textField.isEditable = false
-            textField.translatesAutoresizingMaskIntoConstraints = false
-            
-            view?.addSubview(textField)
-            view?.textField = textField
-            
-            NSLayoutConstraint.activate([
-                textField.leadingAnchor.constraint(equalTo: view!.leadingAnchor, constant: 2),
-                textField.trailingAnchor.constraint(equalTo: view!.trailingAnchor, constant: -2),
-                textField.centerYAnchor.constraint(equalTo: view!.centerYAnchor)
-            ])
-        }
-        
-        if let folder = item as? CPYFolder {
-            view?.textField?.stringValue = "📁 " + folder.title
-        } else if let snippet = item as? CPYSnippet {
-            view?.textField?.stringValue = "📄 " + snippet.title
-        }
-        
-        return view
-    }
-    
-    func outlineViewSelectionDidChange(_ notification: Notification) {
-        let selectedRow = foldersOutlineView.selectedRow
-        guard selectedRow >= 0 else {
-            clearDetails()
-            return
-        }
-        
-        selectedItem = foldersOutlineView.item(atRow: selectedRow)
-        
-        if let snippet = selectedItem as? CPYSnippet {
-            snippetTitleField.stringValue = snippet.title
-            snippetContentTextView.string = snippet.content
-        } else {
-            clearDetails()
-        }
+        contentView.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+        ])
     }
 }
