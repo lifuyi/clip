@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "Clipy",
     platforms: [
-        .macOS(.v10_15)
+        .macOS(.v10_12)
     ],
     products: [
         .executable(name: "Clipy", targets: ["Clipy"])

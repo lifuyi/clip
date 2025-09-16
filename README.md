@@ -42,7 +42,7 @@ Clipy is a feature-rich clipboard manager that runs in the macOS menu bar. Based
 
 ## Requirements
 
-- macOS 10.15 or later
+- macOS 10.12 or later
 - Swift 5.3 or later (command line tools)
 
 ## Building the Project
