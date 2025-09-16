@@ -1,0 +1,19 @@
+# Build artifacts
+.build/
+build/
+
+# macOS
+.DS_Store
+*.app
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+*.moved-aside
+
+# Swift
+*.swiftpm
+Package.resolved
+
+# Logs
+*.log
