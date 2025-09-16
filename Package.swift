@@ -2,20 +2,29 @@
 import PackageDescription
 
 let package = Package(
-    name: "MyClipyMenuBar",
+    name: "Clipy",
     platforms: [
         .macOS(.v10_15)
     ],
     products: [
-        .executable(name: "MyClipyMenuBar", targets: ["MyClipyMenuBar"])
+        .executable(name: "Clipy", targets: ["Clipy"])
     ],
     dependencies: [
     ],
     targets: [
         .target(
-            name: "MyClipyMenuBar",
+            name: "Clipy",
             dependencies: [],
-            path: "src"
+            path: "src",
+            sources: [
+                "main.swift",
+                "Constants.swift", 
+                "MenuType.swift",
+                "Extensions.swift",
+                "Models.swift",
+                "Services.swift",
+                "PreferencesWindow.swift"
+            ]
         )
     ]
 )
