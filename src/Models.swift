@@ -342,6 +342,7 @@ class CPYUtilities {
             Constants.UserDefaults.maxImageWidth: 200,
             Constants.UserDefaults.maxImageHeight: 200,
             Constants.UserDefaults.soundEffectEnabled: true,
+            Constants.UserDefaults.soundEffectType: Constants.SoundEffect.pop,  // Default to Pop sound
             Constants.UserDefaults.timeInterval: 0.5,
             Constants.UserDefaults.storeTypes: CPYClipData.availableTypesDictionary
         ]

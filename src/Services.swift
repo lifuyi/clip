@@ -121,10 +121,21 @@ class ClipService: NSObject {
     }
     
     private func playSoundEffect() {
-        if UserDefaults.standard.bool(forKey: Constants.UserDefaults.soundEffectEnabled) {
-            // Play a pleasant "Pop" sound effect when content is copied
-            // System sound 1006 is a nice "Pop" sound
-            AudioServicesPlaySystemSound(1006)
+        guard UserDefaults.standard.bool(forKey: Constants.UserDefaults.soundEffectEnabled) else { return }
+        
+        let soundTypeString = UserDefaults.standard.string(forKey: Constants.UserDefaults.soundEffectType) ?? Constants.SoundEffect.pop
+        let soundType = CPYSoundEffectType(rawValue: soundTypeString) ?? .pop
+        
+        // Only play sound if it's not set to none
+        if soundType != .none {
+            AudioServicesPlaySystemSound(soundType.systemSoundID)
+        }
+    }
+    
+    // MARK: - Sound Effect Testing
+    static func playSoundEffectPreview(_ type: CPYSoundEffectType) {
+        if type != .none {
+            AudioServicesPlaySystemSound(type.systemSoundID)
         }
     }
     

@@ -42,6 +42,7 @@ struct Constants {
         static let maxImageWidth = "maxImageWidth"
         static let maxImageHeight = "maxImageHeight"
         static let soundEffectEnabled = "soundEffectEnabled"
+        static let soundEffectType = "soundEffectType"
         static let timeInterval = "timeInterval"
     }
     
@@ -78,5 +79,67 @@ struct Constants {
         static let mainKeyCombo = "MainKeyCombo"
         static let historyKeyCombo = "HistoryKeyCombo"
         static let snippetKeyCombo = "SnippetKeyCombo"
+    }
+    
+    struct SoundEffect {
+        static let pop = "pop"
+        static let click = "click"
+        static let tick = "tick"
+        static let bell = "bell"
+        static let chime = "chime"
+        static let beep = "beep"
+        static let whistle = "whistle"
+        static let none = "none"
+    }
+}
+
+// MARK: - Sound Effect Types
+enum CPYSoundEffectType: String, CaseIterable {
+    case pop = "pop"
+    case click = "click"
+    case tick = "tick"
+    case bell = "bell"
+    case chime = "chime"
+    case beep = "beep"
+    case whistle = "whistle"
+    case none = "none"
+    
+    var displayName: String {
+        switch self {
+        case .pop: return "Pop (Default)"
+        case .click: return "Click"
+        case .tick: return "Tick"
+        case .bell: return "Bell"
+        case .chime: return "Chime"
+        case .beep: return "Beep"
+        case .whistle: return "Whistle"
+        case .none: return "Silent"
+        }
+    }
+    
+    var systemSoundID: UInt32 {
+        switch self {
+        case .pop: return 1006      // Pop sound
+        case .click: return 1000    // Click sound
+        case .tick: return 1016     // Tick sound
+        case .bell: return 1005     // Bell sound
+        case .chime: return 1008    // Chime sound
+        case .beep: return 1004     // Beep sound
+        case .whistle: return 1014  // Whistle sound
+        case .none: return 0        // No sound
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .pop: return "A pleasant pop sound"
+        case .click: return "A crisp click sound"
+        case .tick: return "A subtle tick sound"
+        case .bell: return "A gentle bell chime"
+        case .chime: return "A melodic chime"
+        case .beep: return "A simple beep tone"
+        case .whistle: return "A short whistle sound"
+        case .none: return "No sound effect"
+        }
     }
 }
