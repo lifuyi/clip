@@ -122,6 +122,8 @@ class ClipService: NSObject {
     
     private func playSoundEffect() {
         if UserDefaults.standard.bool(forKey: Constants.UserDefaults.soundEffectEnabled) {
+            // Play a pleasant "Pop" sound effect when content is copied
+            // System sound 1006 is a nice "Pop" sound
             AudioServicesPlaySystemSound(1006)
         }
     }
