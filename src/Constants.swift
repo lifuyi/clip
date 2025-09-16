@@ -44,6 +44,7 @@ struct Constants {
         static let soundEffectEnabled = "soundEffectEnabled"
         static let soundEffectType = "soundEffectType"
         static let timeInterval = "timeInterval"
+        static let maxSnippets = "maxSnippets"
     }
     
     struct Beta {
@@ -89,6 +90,7 @@ struct Constants {
         static let chime = "chime"
         static let beep = "beep"
         static let whistle = "whistle"
+        static let sms = "sms"
         static let none = "none"
     }
 }
@@ -102,6 +104,7 @@ enum CPYSoundEffectType: String, CaseIterable {
     case chime = "chime"
     case beep = "beep"
     case whistle = "whistle"
+    case sms = "sms"
     case none = "none"
     
     var displayName: String {
@@ -113,6 +116,7 @@ enum CPYSoundEffectType: String, CaseIterable {
         case .chime: return "Chime"
         case .beep: return "Beep"
         case .whistle: return "Whistle"
+        case .sms: return "SMS"
         case .none: return "Silent"
         }
     }
@@ -126,6 +130,7 @@ enum CPYSoundEffectType: String, CaseIterable {
         case .chime: return 1008    // Chime sound
         case .beep: return 1004     // Beep sound
         case .whistle: return 1014  // Whistle sound
+        case .sms: return 1003      // SMS sound (the one you heard and preferred)
         case .none: return 0        // No sound
         }
     }
@@ -139,6 +144,7 @@ enum CPYSoundEffectType: String, CaseIterable {
         case .chime: return "A melodic chime"
         case .beep: return "A simple beep tone"
         case .whistle: return "A short whistle sound"
+        case .sms: return "An SMS notification sound"
         case .none: return "No sound effect"
         }
     }

@@ -57,8 +57,9 @@ class CPYAppInfo: NSObject, NSCoding {
 }
 
 // MARK: - CPYClipData
-class CPYClipData: NSObject, NSCoding {
-    let types: [NSPasteboard.PasteboardType]
+class CPYClipData: NSObject, NSCoding, NSSecureCoding {
+    static var supportsSecureCoding: Bool = true
+    let types: [String]
     let fileNames: [String]?
     let URLs: [URL]?
     let stringValue: String?
@@ -92,7 +93,7 @@ class CPYClipData: NSObject, NSCoding {
     }
     
     var isOnlyStringType: Bool {
-        return types.count == 1 && types.first == .string
+        return types.count == 1 && types.first == NSPasteboard.PasteboardType.string.rawValue
     }
     
     var thumbnailImage: NSImage? {
@@ -106,38 +107,76 @@ class CPYClipData: NSObject, NSCoding {
     }
     
     init(pasteboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) {
-        self.types = types
+        // Store raw string values instead of NSPasteboard.PasteboardType
+        self.types = types.map { $0.rawValue }
         
-        // Extract string value
-        self.stringValue = pasteboard.string(forType: .string)
+        // Extract string value with safety check
+        self.stringValue = {
+            do {
+                return pasteboard.string(forType: .string)
+            } catch {
+                print("Error reading string from pasteboard: \(error)")
+                return nil
+            }
+        }()
         
-        // Extract RTF data
-        self.RTFData = pasteboard.data(forType: .rtf)
+        // Extract RTF data with safety check
+        self.RTFData = {
+            do {
+                return pasteboard.data(forType: .rtf)
+            } catch {
+                print("Error reading RTF from pasteboard: \(error)")
+                return nil
+            }
+        }()
         
-        // Extract PDF data
-        self.PDF = pasteboard.data(forType: .pdf)
+        // Extract PDF data with safety check
+        self.PDF = {
+            do {
+                return pasteboard.data(forType: .pdf)
+            } catch {
+                print("Error reading PDF from pasteboard: \(error)")
+                return nil
+            }
+        }()
         
-        // Extract image
-        if let imageData = pasteboard.data(forType: .tiff) {
-            self.image = NSImage(data: imageData)
-        } else {
-            self.image = nil
-        }
+        // Extract image with safety check and memory management
+        self.image = {
+            do {
+                guard let imageData = pasteboard.data(forType: .tiff) else { return nil }
+                
+                // Limit image size to prevent memory issues
+                if imageData.count > 50 * 1024 * 1024 { // 50MB limit
+                    print("Image too large, skipping: \(imageData.count) bytes")
+                    return nil
+                }
+                
+                return NSImage(data: imageData)
+            } catch {
+                print("Error reading image from pasteboard: \(error)")
+                return nil
+            }
+        }()
         
-        // Extract file URLs
-        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
-            self.URLs = urls
-            self.fileNames = urls.map { $0.lastPathComponent }
-        } else {
-            self.URLs = nil
-            self.fileNames = nil
-        }
+        // Extract file URLs with safety check
+        (self.URLs, self.fileNames) = {
+            do {
+                if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+                    return (urls, urls.map { $0.lastPathComponent })
+                } else {
+                    return (nil, nil)
+                }
+            } catch {
+                print("Error reading URLs from pasteboard: \(error)")
+                return (nil, nil)
+            }
+        }()
         
         super.init()
     }
     
     init(image: NSImage) {
-        self.types = [.tiff]
+        self.types = [NSPasteboard.PasteboardType.tiff.rawValue]
         self.image = image
         self.stringValue = nil
         self.RTFData = nil
@@ -149,11 +188,12 @@ class CPYClipData: NSObject, NSCoding {
     }
     
     required init?(coder: NSCoder) {
-        guard let types = coder.decodeObject(forKey: "types") as? [NSPasteboard.PasteboardType] else {
+        // Decode types as [String] instead of [NSPasteboard.PasteboardType]
+        guard let types = coder.decodeObject(forKey: "types") as? [String] else {
             return nil
         }
-        
         self.types = types
+        
         self.stringValue = coder.decodeObject(forKey: "stringValue") as? String
         self.RTFData = coder.decodeObject(forKey: "RTFData") as? Data
         self.PDF = coder.decodeObject(forKey: "PDF") as? Data
@@ -165,6 +205,7 @@ class CPYClipData: NSObject, NSCoding {
     }
     
     func encode(with coder: NSCoder) {
+        // Encode types as [String] instead of [NSPasteboard.PasteboardType]
         coder.encode(types, forKey: "types")
         coder.encode(stringValue, forKey: "stringValue")
         coder.encode(RTFData, forKey: "RTFData")
@@ -203,11 +244,20 @@ class CPYClip: NSObject {
     let isColorCode: Bool
     
     var clipData: CPYClipData? {
-        guard let data = NSData(contentsOfFile: dataPath),
-              let clipData = NSKeyedUnarchiver.unarchiveObject(with: data as Data) as? CPYClipData else {
+        guard let data = NSData(contentsOfFile: dataPath) else {
             return nil
         }
-        return clipData
+        
+        do {
+            if #available(macOS 10.13, *) {
+                return try NSKeyedUnarchiver.unarchivedObject(ofClass: CPYClipData.self, from: data as Data)
+            } else {
+                return NSKeyedUnarchiver.unarchiveObject(with: data as Data) as? CPYClipData
+            }
+        } catch {
+            print("Error unarchiving clip data: \(error)")
+            return nil
+        }
     }
     
     init(identifier: String, clipData: CPYClipData) {
@@ -217,13 +267,28 @@ class CPYClip: NSObject {
         self.updateTime = Date()
         self.isColorCode = clipData.colorCodeImage != nil
         
-        // Generate title
+        // Generate title with maximum 20 characters from the first line only
         if let string = clipData.stringValue {
-            self.title = string.count > 50 ? String(string.prefix(50)) + "..." : string
+            // Get the first line only
+            let lines = string.components(separatedBy: .newlines)
+            let firstLine = lines.first ?? ""
+            
+            // Limit the first line to 20 characters
+            if firstLine.count > 20 {
+                self.title = String(firstLine.prefix(20)) + "..."
+            } else {
+                self.title = firstLine
+            }
         } else if clipData.image != nil {
             self.title = "Image"
         } else if let fileNames = clipData.fileNames {
-            self.title = fileNames.joined(separator: ", ")
+            // For file names, also show only first name and limit to 20 characters
+            let firstName = fileNames.first ?? "File"
+            if firstName.count > 20 {
+                self.title = String(firstName.prefix(20)) + "..."
+            } else {
+                self.title = firstName
+            }
         } else {
             self.title = "Clipboard Item"
         }
@@ -247,9 +312,18 @@ class CPYClip: NSObject {
         
         super.init()
         
-        // Save clip data
-        let archivedData = NSKeyedArchiver.archivedData(withRootObject: clipData)
-        try? archivedData.write(to: URL(fileURLWithPath: dataPath))
+        // Save clip data with proper error handling
+        do {
+            let archivedData: Data
+            if #available(macOS 10.13, *) {
+                archivedData = try NSKeyedArchiver.archivedData(withRootObject: clipData, requiringSecureCoding: false)
+            } else {
+                archivedData = NSKeyedArchiver.archivedData(withRootObject: clipData)
+            }
+            try archivedData.write(to: URL(fileURLWithPath: dataPath))
+        } catch {
+            print("Error saving clip data: \(error)")
+        }
     }
 }
 
@@ -342,12 +416,21 @@ class CPYUtilities {
             Constants.UserDefaults.maxImageWidth: 200,
             Constants.UserDefaults.maxImageHeight: 200,
             Constants.UserDefaults.soundEffectEnabled: true,
-            Constants.UserDefaults.soundEffectType: Constants.SoundEffect.pop,  // Default to Pop sound
+            Constants.UserDefaults.soundEffectType: Constants.SoundEffect.sms,  // Changed to SMS sound
             Constants.UserDefaults.timeInterval: 0.5,
             Constants.UserDefaults.storeTypes: CPYClipData.availableTypesDictionary
         ]
         
         UserDefaults.standard.register(defaults: defaults)
+        
+        // Also set these values explicitly to ensure they exist
+        if UserDefaults.standard.object(forKey: Constants.UserDefaults.soundEffectEnabled) == nil {
+            UserDefaults.standard.set(true, forKey: Constants.UserDefaults.soundEffectEnabled)
+        }
+        
+        if UserDefaults.standard.object(forKey: Constants.UserDefaults.soundEffectType) == nil {
+            UserDefaults.standard.set(Constants.SoundEffect.sms, forKey: Constants.UserDefaults.soundEffectType)
+        }
     }
 }
 

@@ -8,6 +8,7 @@ class PreferencesWindowController: NSWindowController {
     private var maxMenuItemTitleLengthField: NSTextField!
     private var maxSnippetsField: NSTextField!
     private var soundEffectCheckbox: NSButton!
+    private var soundEffectPopup: NSPopUpButton!
     private var showImageCheckbox: NSButton!
     private var colorPreviewCheckbox: NSButton!
     private var numericKeysCheckbox: NSButton!
@@ -131,6 +132,13 @@ class PreferencesWindowController: NSWindowController {
         soundEffectCheckbox = NSButton(checkboxWithTitle: "Enable sound effects", target: self, action: #selector(soundEffectToggled(_:)))
         stackView.addArrangedSubview(soundEffectCheckbox)
         
+        // Sound Effect Type
+        let soundEffectView = createSoundEffectPopup()
+        soundEffectPopup = soundEffectView.popup
+        soundEffectPopup.target = self
+        soundEffectPopup.action = #selector(soundEffectTypeChanged(_:))
+        stackView.addArrangedSubview(soundEffectView.container)
+        
         // Timing Settings Section
         let timingLabel = NSTextField(labelWithString: "Timing Settings")
         timingLabel.font = NSFont.boldSystemFont(ofSize: 14)
@@ -185,6 +193,40 @@ class PreferencesWindowController: NSWindowController {
         return (container, textField)
     }
     
+    private func createSoundEffectPopup() -> (container: NSView, popup: NSPopUpButton) {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        container.heightAnchor.constraint(greaterThanOrEqualToConstant: 30).isActive = true
+        
+        let labelField = NSTextField(labelWithString: "Sound Effect:")
+        labelField.translatesAutoresizingMaskIntoConstraints = false
+        
+        let popupButton = NSPopUpButton()
+        popupButton.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Add all available sound effects to the popup
+        for soundType in CPYSoundEffectType.allCases {
+            if soundType != .none {
+                popupButton.addItem(withTitle: soundType.displayName)
+                popupButton.lastItem?.representedObject = soundType
+            }
+        }
+        
+        container.addSubview(labelField)
+        container.addSubview(popupButton)
+        
+        NSLayoutConstraint.activate([
+            labelField.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            labelField.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            labelField.widthAnchor.constraint(equalToConstant: 180),
+            popupButton.leadingAnchor.constraint(equalTo: labelField.trailingAnchor, constant: 10),
+            popupButton.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            popupButton.widthAnchor.constraint(equalToConstant: 150)
+        ])
+        
+        return (container, popupButton)
+    }
+    
     private func createSliderField(_ label: String, width: CGFloat) -> (container: NSView, slider: NSSlider, label: NSTextField) {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
@@ -236,6 +278,28 @@ class PreferencesWindowController: NSWindowController {
         let timeInterval = defaults.double(forKey: Constants.UserDefaults.timeInterval)
         timeIntervalSlider?.doubleValue = timeInterval > 0 ? timeInterval : 0.5
         timeIntervalLabel?.stringValue = String(format: "%.1f", timeIntervalSlider?.doubleValue ?? 0.5)
+        
+        // Load sound effect type
+        loadSoundEffectType()
+    }
+    
+    private func loadSoundEffectType() {
+        let defaults = UserDefaults.standard
+        let soundTypeString = defaults.string(forKey: Constants.UserDefaults.soundEffectType) ?? Constants.SoundEffect.pop
+        let soundType = CPYSoundEffectType(rawValue: soundTypeString) ?? .pop
+        
+        // Select the appropriate item in the popup
+        for i in 0..<soundEffectPopup.numberOfItems {
+            if let menuItem = soundEffectPopup.item(at: i),
+               let itemSoundType = menuItem.representedObject as? CPYSoundEffectType,
+               itemSoundType == soundType {
+                soundEffectPopup.selectItem(at: i)
+                break
+            }
+        }
+        
+        // Enable/disable popup based on checkbox state
+        soundEffectPopup.isEnabled = defaults.bool(forKey: Constants.UserDefaults.soundEffectEnabled)
     }
     
     @objc private func maxHistorySizeChanged(_ sender: NSTextField) {
@@ -269,7 +333,21 @@ class PreferencesWindowController: NSWindowController {
     }
     
     @objc private func soundEffectToggled(_ sender: NSButton) {
-        UserDefaults.standard.set(sender.state == .on, forKey: Constants.UserDefaults.soundEffectEnabled)
+        let isEnabled = sender.state == .on
+        UserDefaults.standard.set(isEnabled, forKey: Constants.UserDefaults.soundEffectEnabled)
+        
+        // Enable/disable the sound type popup based on checkbox state
+        soundEffectPopup.isEnabled = isEnabled
+    }
+    
+    @objc private func soundEffectTypeChanged(_ sender: NSPopUpButton) {
+        guard let selectedItem = sender.selectedItem,
+              let soundType = selectedItem.representedObject as? CPYSoundEffectType else { return }
+        
+        UserDefaults.standard.set(soundType.rawValue, forKey: Constants.UserDefaults.soundEffectType)
+        
+        // Play preview of selected sound
+        ClipService.playSoundEffectPreview(soundType)
     }
     
     @objc private func timeIntervalChanged(_ sender: NSSlider) {
@@ -297,6 +375,7 @@ class PreferencesWindowController: NSWindowController {
             UserDefaults.standard.set(true, forKey: Constants.UserDefaults.showColorPreviewInMenu)
             UserDefaults.standard.set(true, forKey: Constants.UserDefaults.addNumericKeyEquivalents)
             UserDefaults.standard.set(true, forKey: Constants.UserDefaults.soundEffectEnabled)
+            UserDefaults.standard.set(Constants.SoundEffect.pop, forKey: Constants.UserDefaults.soundEffectType)
             UserDefaults.standard.set(0.5, forKey: Constants.UserDefaults.timeInterval)
             UserDefaults.standard.set(false, forKey: Constants.UserDefaults.loginItem)
             

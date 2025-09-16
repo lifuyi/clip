@@ -17,10 +17,57 @@ class ClipService: NSObject {
     }
     
     func startMonitoring() {
-        lastChangeCount = NSPasteboard.general.changeCount
+        let pasteboard = NSPasteboard.general
+        lastChangeCount = pasteboard.changeCount
+        let interval = UserDefaults.standard.double(forKey: Constants.UserDefaults.timeInterval)
+        let actualInterval = interval > 0 ? interval : 0.5
         
-        timer = Timer.scheduledTimer(withTimeInterval: UserDefaults.standard.double(forKey: Constants.UserDefaults.timeInterval), repeats: true) { [weak self] _ in
+        // Debug logging to file
+        let debugLog = "Starting clipboard monitoring with interval: \(actualInterval)s, initial change count: \(lastChangeCount)"
+        logToFile(debugLog)
+        
+        // Log initial pasteboard state
+        if let types = pasteboard.types {
+            logToFile("Initial pasteboard types: \(types)")
+        }
+        if let string = pasteboard.string(forType: .string) {
+            logToFile("Initial pasteboard string content (first 100 chars): \(String(string.prefix(100)))")
+        }
+        
+        // Stop any existing timer
+        timer?.invalidate()
+        
+        // Create and schedule timer on main run loop
+        timer = Timer(timeInterval: actualInterval, repeats: true) { [weak self] _ in
             self?.checkClipboard()
+        }
+        
+        if let timer = timer {
+            RunLoop.main.add(timer, forMode: .common)
+            logToFile("Timer scheduled on main run loop")
+        }
+        
+        // Perform initial clipboard check
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.checkClipboard()
+        }
+    }
+    
+    private func logToFile(_ message: String) {
+        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .medium)
+        let logMessage = "[\(timestamp)] \(message)\n"
+        let logPath = "\(CPYUtilities.applicationSupportFolder())/debug.log"
+        
+        if let data = logMessage.data(using: .utf8) {
+            if FileManager.default.fileExists(atPath: logPath) {
+                if let fileHandle = FileHandle(forWritingAtPath: logPath) {
+                    fileHandle.seekToEndOfFile()
+                    fileHandle.write(data)
+                    fileHandle.closeFile()
+                }
+            } else {
+                try? data.write(to: URL(fileURLWithPath: logPath))
+            }
         }
     }
     
@@ -30,49 +77,128 @@ class ClipService: NSObject {
     }
     
     private func checkClipboard() {
-        let currentChangeCount = NSPasteboard.general.changeCount
+        let pasteboard = NSPasteboard.general
+        let currentChangeCount = pasteboard.changeCount
+        logToFile("Checking clipboard - current: \(currentChangeCount), last: \(lastChangeCount)")
+        
+        // Additional debugging info
+        if let types = pasteboard.types {
+            logToFile("Current pasteboard types: \(types)")
+        } else {
+            logToFile("Could not get pasteboard types")
+        }
+        
+        if let string = pasteboard.string(forType: .string) {
+            logToFile("Current pasteboard string content (first 100 chars): \(String(string.prefix(100)))")
+        } else {
+            logToFile("No string content in pasteboard")
+        }
+        
         if currentChangeCount != lastChangeCount {
+            logToFile("Clipboard change detected!")
             lastChangeCount = currentChangeCount
             handleClipboardChange()
+        } else {
+            logToFile("No clipboard change detected")
         }
     }
     
     private func handleClipboardChange() {
-        let pasteboard = NSPasteboard.general
-        let availableTypes = pasteboard.types?.filter { CPYClipData.availableTypes.contains($0) } ?? []
+        logToFile("Handling clipboard change...")
         
-        guard !availableTypes.isEmpty else { return }
-        
-        // Check if we should exclude this app
-        if shouldExcludeCurrentApp() { return }
-        
-        let clipData = CPYClipData(pasteboard: pasteboard, types: availableTypes)
-        
-        // Check for duplicates
-        if clips.contains(where: { $0.dataHash == clipData.hash }) {
-            return
-        }
-        
-        lock.lock()
-        defer { lock.unlock() }
-        
-        let clip = CPYClip(identifier: UUID().uuidString, clipData: clipData)
-        clips.insert(clip, at: 0)
-        
-        // Limit history size
+        // Debug current settings
         let maxSize = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxHistorySize)
-        if clips.count > maxSize {
-            let clipsToRemove = clips.suffix(clips.count - maxSize)
-            for clip in clipsToRemove {
-                deleteClipFiles(clip)
+        let timeInterval = UserDefaults.standard.double(forKey: Constants.UserDefaults.timeInterval)
+        logToFile("Current settings - maxHistorySize: \(maxSize), timeInterval: \(timeInterval)")
+        
+        // Wrap the entire operation in a try-catch to prevent crashes
+        do {
+            let pasteboard = NSPasteboard.general
+            
+            // Safely get pasteboard types
+            guard let pasteboardTypes = pasteboard.types else {
+                logToFile("No pasteboard types available")
+                return
             }
-            clips = Array(clips.prefix(maxSize))
+            
+            logToFile("Available pasteboard types: \(pasteboardTypes)")
+            let availableTypes = pasteboardTypes.filter { CPYClipData.availableTypes.contains($0) }
+            
+            logToFile("Supported types: \(availableTypes)")
+            guard !availableTypes.isEmpty else { 
+                logToFile("No supported types found")
+                return 
+            }
+            
+            // Check if we should exclude this app
+            if shouldExcludeCurrentApp() { 
+                logToFile("Current app is excluded from clipboard monitoring")
+                return 
+            }
+            
+            // Create clip data with error handling
+            let clipData: CPYClipData
+            do {
+                clipData = try createClipDataSafely(pasteboard: pasteboard, types: availableTypes)
+                logToFile("Clip data created successfully")
+            } catch {
+                logToFile("Error creating clip data: \(error)")
+                return
+            }
+            
+            // Check for duplicates
+            lock.lock()
+            let isDuplicate = clips.contains(where: { $0.dataHash == clipData.hash })
+            lock.unlock()
+            
+            if isDuplicate {
+                logToFile("Duplicate clip detected, skipping")
+                return
+            }
+            
+            logToFile("Creating new clip object")
+            // Create clip object
+            let clip = CPYClip(identifier: UUID().uuidString, clipData: clipData)
+            
+            lock.lock()
+            defer { lock.unlock() }
+            
+            clips.insert(clip, at: 0)
+            logToFile("Clip added to history, total clips: \(clips.count)")
+            
+            // Limit history size
+            let maxSize = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxHistorySize)
+            let effectiveMaxSize = maxSize > 0 ? maxSize : 20 // Default to 20 if not set or 0
+            logToFile("Max history size: \(maxSize), effective: \(effectiveMaxSize)")
+            if clips.count > effectiveMaxSize {
+                let clipsToRemove = clips.suffix(clips.count - effectiveMaxSize)
+                for clip in clipsToRemove {
+                    deleteClipFiles(clip)
+                }
+                clips = Array(clips.prefix(effectiveMaxSize))
+                logToFile("History truncated to \(clips.count) clips")
+            }
+            
+            logToFile("Saving clips to disk...")
+            saveClipsToDisk()
+            logToFile("Playing sound effect...")
+            playSoundEffect()
+            
+            // Post notification on main thread
+            DispatchQueue.main.async {
+                self.logToFile("Posting clipDataUpdated notification")
+                NotificationCenter.default.post(name: Constants.Notification.clipDataUpdated, object: nil)
+            }
+            logToFile("Clipboard change handling completed")
+            
+        } catch {
+            logToFile("Clipboard handling error: \(error)")
+            print("Clipboard handling error: \(error)")
         }
-        
-        saveClipsToDisk()
-        playSoundEffect()
-        
-        NotificationCenter.default.post(name: Constants.Notification.clipDataUpdated, object: nil)
+    }
+    
+    private func createClipDataSafely(pasteboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) throws -> CPYClipData {
+        return CPYClipData(pasteboard: pasteboard, types: types)
     }
     
     func getAllClips() -> [CPYClip] {
@@ -107,10 +233,19 @@ class ClipService: NSObject {
     
     private func shouldExcludeCurrentApp() -> Bool {
         guard let currentApp = NSWorkspace.shared.frontmostApplication,
-              let bundleIdentifier = currentApp.bundleIdentifier else { return false }
+              let bundleIdentifier = currentApp.bundleIdentifier else { 
+            logToFile("Could not get current app or bundle identifier")
+            return false 
+        }
+        
+        logToFile("Current app: \(currentApp.localizedName) (\(bundleIdentifier))")
         
         let excludedApps = UserDefaults.standard.array(forKey: Constants.UserDefaults.excludedApplicationIdentifiers) as? [String] ?? []
-        return excludedApps.contains(bundleIdentifier)
+        let isExcluded = excludedApps.contains(bundleIdentifier)
+        if isExcluded {
+            logToFile("Current app is excluded: \(bundleIdentifier)")
+        }
+        return isExcluded
     }
     
     private func deleteClipFiles(_ clip: CPYClip) {
@@ -121,21 +256,82 @@ class ClipService: NSObject {
     }
     
     private func playSoundEffect() {
-        guard UserDefaults.standard.bool(forKey: Constants.UserDefaults.soundEffectEnabled) else { return }
+        guard UserDefaults.standard.bool(forKey: Constants.UserDefaults.soundEffectEnabled) else { 
+            print("Sound effects disabled")
+            return 
+        }
         
-        let soundTypeString = UserDefaults.standard.string(forKey: Constants.UserDefaults.soundEffectType) ?? Constants.SoundEffect.pop
-        let soundType = CPYSoundEffectType(rawValue: soundTypeString) ?? .pop
+        let soundTypeString = UserDefaults.standard.string(forKey: Constants.UserDefaults.soundEffectType) ?? Constants.SoundEffect.sms
+        let soundType = CPYSoundEffectType(rawValue: soundTypeString) ?? .sms
+        
+        print("Playing sound effect: \(soundType.rawValue) with ID: \(soundType.systemSoundID)")
         
         // Only play sound if it's not set to none
         if soundType != .none {
-            AudioServicesPlaySystemSound(soundType.systemSoundID)
+            // Use NSSound as it works better than AudioServicesPlaySystemSound
+            let soundName: String
+            switch soundType {
+            case .sms:
+                soundName = "Pop"  // Changed to Pop sound
+            case .pop:
+                soundName = "Pop"
+            case .beep:
+                soundName = "Basso"
+            case .click:
+                soundName = "Frog"
+            case .tick:
+                soundName = "Tink"
+            case .bell:
+                soundName = "Glass"
+            case .chime:
+                soundName = "Purr"
+            case .whistle:
+                soundName = "Submarine"
+            default:
+                soundName = "Pop"  // Default to Pop
+            }
+            
+            if let sound = NSSound(named: soundName) {
+                sound.play()
+            } else {
+                // Fall back to AudioServicesPlaySystemSound if NSSound fails
+                AudioServicesPlaySystemSound(soundType.systemSoundID)
+            }
         }
     }
     
     // MARK: - Sound Effect Testing
     static func playSoundEffectPreview(_ type: CPYSoundEffectType) {
-        if type != .none {
-            AudioServicesPlaySystemSound(type.systemSoundID)
+        // Play sound using NSSound for preview
+        let soundName: String
+        switch type {
+        case .sms:
+            soundName = "Pop"   // Use Pop sound for SMS preview
+        case .pop:
+            soundName = "Pop"
+        case .beep:
+            soundName = "Basso"
+        case .click:
+            soundName = "Frog"
+        case .tick:
+            soundName = "Tink"
+        case .bell:
+            soundName = "Glass"
+        case .chime:
+            soundName = "Purr"
+        case .whistle:
+            soundName = "Submarine"
+        case .none:
+            return  // No sound for none
+        }
+        
+        if let sound = NSSound(named: soundName) {
+            sound.play()
+        } else {
+            // Fall back to AudioServicesPlaySystemSound if NSSound fails
+            if type != .none {
+                AudioServicesPlaySystemSound(type.systemSoundID)
+            }
         }
     }
     
@@ -198,6 +394,7 @@ class MenuManager: NSObject {
     }
     
     @objc private func clipDataUpdated() {
+        print("Clip data updated notification received")
         updateMenus()
     }
     
@@ -434,28 +631,29 @@ class PasteService: NSObject {
         let item = NSPasteboardItem()
         
         for type in clipData.types {
-            switch type {
+            let pasteboardType = NSPasteboard.PasteboardType(rawValue: type)
+            switch pasteboardType {
             case .string:
                 if let string = clipData.stringValue {
-                    item.setString(string, forType: type)
+                    item.setString(string, forType: pasteboardType)
                 }
             case .rtf:
                 if let rtfData = clipData.RTFData {
-                    item.setData(rtfData, forType: type)
+                    item.setData(rtfData, forType: pasteboardType)
                 }
             case .pdf:
                 if let pdfData = clipData.PDF {
-                    item.setData(pdfData, forType: type)
+                    item.setData(pdfData, forType: pasteboardType)
                 }
             case .tiff:
                 if let image = clipData.image,
                    let tiffData = image.tiffRepresentation {
-                    item.setData(tiffData, forType: type)
+                    item.setData(tiffData, forType: pasteboardType)
                 }
             case .fileURL:
                 if let urls = clipData.URLs {
                     for url in urls {
-                        item.setString(url.absoluteString, forType: type)
+                        item.setString(url.absoluteString, forType: pasteboardType)
                     }
                 }
             default:
