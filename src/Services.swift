@@ -704,20 +704,100 @@ class PasteService: NSObject {
     static let shared = PasteService()
     
     func paste(clip: CPYClip) {
-        guard let clipData = clip.clipData,
-              let stringValue = clipData.stringValue else { 
-            return 
+        print("PasteService.paste(clip:) called with clip: \(clip.title)")
+        
+        guard let clipData = clip.clipData else {
+            print("Failed to get clipData from clip")
+            return
         }
         
+        guard let stringValue = clipData.stringValue else {
+            print("No string value in clip data")
+            return
+        }
+        
+        print("Setting clipboard content: \(stringValue.prefix(100))...")
+        
         let pasteboard = NSPasteboard.general
+        let changeCountBefore = pasteboard.changeCount
+        print("Pasteboard change count before clear: \(changeCountBefore)")
+        
         pasteboard.clearContents()
-        pasteboard.setString(stringValue, forType: .string)
+        let changeCountAfterClear = pasteboard.changeCount
+        print("Pasteboard change count after clear: \(changeCountAfterClear)")
+        
+        let setResult = pasteboard.setString(stringValue, forType: .string)
+        let changeCountAfterSet = pasteboard.changeCount
+        print("Set string result: \(setResult)")
+        print("Pasteboard change count after set: \(changeCountAfterSet)")
+        
+        // Verify the content was set correctly
+        let retrievedString = pasteboard.string(forType: .string)
+        if retrievedString == stringValue {
+            print("Successfully set clipboard content")
+            // Now paste the content to the focused application
+            performPasteToFocusedApp()
+        } else {
+            print("Failed to set clipboard content. Retrieved: \(retrievedString ?? "nil")")
+        }
     }
     
     func paste(snippet: CPYSnippet) {
+        print("PasteService.paste(snippet:) called with snippet: \(snippet.title)")
+        print("Setting clipboard content: \(snippet.content.prefix(100))...")
+        
         let pasteboard = NSPasteboard.general
+        let changeCountBefore = pasteboard.changeCount
+        print("Pasteboard change count before clear: \(changeCountBefore)")
+        
         pasteboard.clearContents()
-        pasteboard.setString(snippet.content, forType: .string)
+        let changeCountAfterClear = pasteboard.changeCount
+        print("Pasteboard change count after clear: \(changeCountAfterClear)")
+        
+        let setResult = pasteboard.setString(snippet.content, forType: .string)
+        let changeCountAfterSet = pasteboard.changeCount
+        print("Set string result: \(setResult)")
+        print("Pasteboard change count after set: \(changeCountAfterSet)")
+        
+        // Verify the content was set correctly
+        let retrievedString = pasteboard.string(forType: .string)
+        if retrievedString == snippet.content {
+            print("Successfully set clipboard content")
+            // Now paste the content to the focused application
+            performPasteToFocusedApp()
+        } else {
+            print("Failed to set clipboard content. Retrieved: \(retrievedString ?? "nil")")
+        }
+    }
+    
+    private func performPasteToFocusedApp() {
+        print("Performing paste to focused application")
+        
+        // Hide the menu first to ensure the previous app regains focus
+        NSMenu.setMenuBarVisible(false)
+        
+        // Add a small delay to allow the menu to close and focus to return to the previous app
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // Simulate ⌘+V keystroke
+            let source = CGEventSource(stateID: .combinedSessionState)
+            
+            // Create Command+V event
+            let vKeyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
+            let vKeyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
+            
+            // Set Command key flag
+            vKeyDown?.flags = .maskCommand
+            vKeyUp?.flags = .maskCommand
+            
+            // Post the events
+            if let downEvent = vKeyDown, let upEvent = vKeyUp {
+                downEvent.post(tap: .cghidEventTap)
+                upEvent.post(tap: .cghidEventTap)
+                print("Successfully sent ⌘+V keystroke")
+            } else {
+                print("Failed to create keyboard events")
+            }
+        }
     }
     
 }
