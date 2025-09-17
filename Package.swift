@@ -23,7 +23,8 @@ let package = Package(
                 "Extensions.swift",
                 "Models.swift",
                 "Services.swift",
-                "PreferencesWindow.swift"
+                "PreferencesWindow.swift",
+                "UIConstants.swift"
             ]
         )
     ]

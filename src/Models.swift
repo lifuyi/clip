@@ -409,7 +409,8 @@ class CPYUtilities {
             Constants.UserDefaults.soundEffectEnabled: true,
             Constants.UserDefaults.soundEffectType: Constants.SoundEffect.sms,  // Changed to SMS sound
             Constants.UserDefaults.timeInterval: 0.5,
-            Constants.UserDefaults.storeTypes: CPYClipData.availableTypesDictionary
+            Constants.UserDefaults.storeTypes: CPYClipData.availableTypesDictionary,
+            Constants.UserDefaults.numberOfRecentItemsToShow: 10 // New preference default
         ]
         
         UserDefaults.standard.register(defaults: defaults)
@@ -421,6 +422,11 @@ class CPYUtilities {
         
         if UserDefaults.standard.object(forKey: Constants.UserDefaults.soundEffectType) == nil {
             UserDefaults.standard.set(Constants.SoundEffect.sms, forKey: Constants.UserDefaults.soundEffectType)
+        }
+        
+        // Set default for new preference if not already set
+        if UserDefaults.standard.object(forKey: Constants.UserDefaults.numberOfRecentItemsToShow) == nil {
+            UserDefaults.standard.set(10, forKey: Constants.UserDefaults.numberOfRecentItemsToShow)
         }
     }
 }

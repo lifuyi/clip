@@ -446,6 +446,7 @@ class MenuManager: NSObject {
     
     func createHistoryMenu() -> NSMenu {
         let menu = NSMenu(title: "History")
+        menu.autoenablesItems = false
         historyMenu = menu
         updateHistoryMenu()
         return menu
@@ -453,6 +454,7 @@ class MenuManager: NSObject {
     
     func createSnippetMenu() -> NSMenu {
         let menu = NSMenu(title: "Snippets")
+        menu.autoenablesItems = false
         snippetMenu = menu
         updateSnippetMenu()
         return menu
@@ -469,24 +471,43 @@ class MenuManager: NSObject {
         menu.removeAllItems()
         
         let clips = ClipService.shared.getAllClips()
+        let numberOfRecentItems = UserDefaults.standard.integer(forKey: Constants.UserDefaults.numberOfRecentItemsToShow)
         
-        if clips.isEmpty {
-            let emptyItem = NSMenuItem(title: "No clipboard history", action: nil)
+        // Skip the items that are shown in the main menu
+        let clipsBeyondRecent = Array(clips.dropFirst(max(0, numberOfRecentItems)))
+        
+        if clipsBeyondRecent.isEmpty {
+            let emptyItem = NSMenuItem(title: "No more clipboard history", action: nil)
             emptyItem.isEnabled = false
             menu.addItem(emptyItem)
         } else {
-            let maxItems = UserDefaults.standard.integer(forKey: Constants.UserDefaults.numberOfItemsPlaceInline)
-            let itemsToShow = Array(clips.prefix(maxItems))
+            // Take only items beyond the recent items (up to 90 items for grouping)
+            let clipsToShow = Array(clipsBeyondRecent.prefix(90))
             
-            for (index, clip) in itemsToShow.enumerated() {
-                let menuItem = createMenuItem(for: clip, index: index)
-                menu.addItem(menuItem)
-            }
+            // Group these items into groups of 10, with at most 9 groups
+            let itemsPerGroup = 10
+            let maxGroups = 9 // For items beyond recent items
             
-            if clips.count > maxItems {
-                menu.addItem(NSMenuItem.separator())
-                let moreItem = NSMenuItem(title: "More...", action: #selector(AppDelegate.showMoreClips))
-                menu.addItem(moreItem)
+            for groupIndex in 0..<maxGroups {
+                let startIndex = groupIndex * itemsPerGroup
+                let endIndex = min(startIndex + itemsPerGroup, clipsToShow.count)
+                
+                // Only create a group if there are items in it
+                if startIndex < clipsToShow.count {
+                    let groupClips = Array(clipsToShow[startIndex..<endIndex])
+                    
+                    // Create a submenu for this group
+                    let groupMenu = NSMenu(title: "Items \(numberOfRecentItems + 1 + startIndex)-\(numberOfRecentItems + endIndex)")
+                    for (index, clip) in groupClips.enumerated() {
+                        let menuItem = createMenuItem(for: clip, index: numberOfRecentItems + startIndex + index) // Adjust index
+                        groupMenu.addItem(menuItem)
+                    }
+                    
+                    // Add the group submenu to the main history menu
+                    let groupItem = NSMenuItem(title: "Items \(numberOfRecentItems + 1 + startIndex)-\(numberOfRecentItems + endIndex)", action: nil)
+                    groupItem.submenu = groupMenu
+                    menu.addItem(groupItem)
+                }
             }
         }
         
@@ -517,18 +538,19 @@ class MenuManager: NSObject {
     }
     
     private func createMenuItem(for clip: CPYClip, index: Int) -> NSMenuItem {
-        // Use the AppDelegate's createMenuItem method to ensure consistent behavior
+        // Always use the AppDelegate's createMenuItem method to ensure consistent behavior
         if let appDelegate = NSApp.delegate as? AppDelegate {
             return appDelegate.createMenuItem(for: clip, index: index)
         }
         
         // Fallback to creating the menu item directly if we can't get the AppDelegate
+        // This ensures the menu item will still work even if there's an issue with the delegate
         let maxLength = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxMenuItemTitleLength)
         let title = clip.title.count > maxLength ? String(clip.title.prefix(maxLength)) + "..." : clip.title
         
         let menuItem = NSMenuItem(title: title, action: #selector(AppDelegate.selectClipMenuItem(_:)))
         menuItem.representedObject = clip
-        menuItem.target = NSApp.delegate
+        menuItem.target = NSApp.delegate ?? self
         
         // Add numeric key equivalent
         if UserDefaults.standard.bool(forKey: Constants.UserDefaults.addNumericKeyEquivalents) && index < 10 {
@@ -682,70 +704,20 @@ class PasteService: NSObject {
     static let shared = PasteService()
     
     func paste(clip: CPYClip) {
-        guard let clipData = clip.clipData else { return }
+        guard let clipData = clip.clipData,
+              let stringValue = clipData.stringValue else { 
+            return 
+        }
         
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        
-        var items: [NSPasteboardItem] = []
-        let item = NSPasteboardItem()
-        
-        for type in clipData.types {
-            let pasteboardType = NSPasteboard.PasteboardType(rawValue: type)
-            switch pasteboardType {
-            case .string:
-                if let string = clipData.stringValue {
-                    item.setString(string, forType: pasteboardType)
-                }
-            case .rtf:
-                if let rtfData = clipData.RTFData {
-                    item.setData(rtfData, forType: pasteboardType)
-                }
-            case .pdf:
-                if let pdfData = clipData.PDF {
-                    item.setData(pdfData, forType: pasteboardType)
-                }
-            case .tiff:
-                if let image = clipData.image,
-                   let tiffData = image.tiffRepresentation {
-                    item.setData(tiffData, forType: pasteboardType)
-                }
-            case .fileURL:
-                if let urls = clipData.URLs {
-                    for url in urls {
-                        item.setString(url.absoluteString, forType: pasteboardType)
-                    }
-                }
-            default:
-                break
-            }
-        }
-        
-        items.append(item)
-        pasteboard.writeObjects(items)
-        
-        // Simulate paste command
-        simulatePaste()
+        pasteboard.setString(stringValue, forType: .string)
     }
     
     func paste(snippet: CPYSnippet) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(snippet.content, forType: .string)
-        
-        simulatePaste()
     }
     
-    private func simulatePaste() {
-        // Create and post a paste event
-        let source = CGEventSource(stateID: .hidSystemState)
-        let pasteKeyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) // V key
-        let pasteKeyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-        
-        pasteKeyDown?.flags = .maskCommand
-        pasteKeyUp?.flags = .maskCommand
-        
-        pasteKeyDown?.post(tap: .cghidEventTap)
-        pasteKeyUp?.post(tap: .cghidEventTap)
-    }
 }

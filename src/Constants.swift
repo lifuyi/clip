@@ -14,7 +14,7 @@ struct Constants {
     struct Menu {
         static let historyMenuItem = "HistoryMenuItem"
         static let snippetMenuItem = "SnippetMenuItem"
-        static let maxHistorySize = 20
+        static let maxHistorySize = 200
         static let maxMenuItemTitleLength = 15
     }
     
@@ -45,6 +45,7 @@ struct Constants {
         static let soundEffectType = "soundEffectType"
         static let timeInterval = "timeInterval"
         static let maxSnippets = "maxSnippets"
+        static let numberOfRecentItemsToShow = "numberOfRecentItemsToShow" // New preference
     }
     
     struct Beta {

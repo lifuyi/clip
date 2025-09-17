@@ -1,7 +1,7 @@
 import Foundation
 import Cocoa
 
-// Simple programmatic preferences window
+// Modern styled preferences window
 class PreferencesWindowController: NSWindowController {
     
     private var maxHistorySizeField: NSTextField!
@@ -15,6 +15,7 @@ class PreferencesWindowController: NSWindowController {
     private var launchAtLoginCheckbox: NSButton!
     private var timeIntervalSlider: NSSlider!
     private var timeIntervalLabel: NSTextField!
+    private var recentItemsField: NSTextField! // New field
     
     init() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
@@ -80,12 +81,12 @@ class PreferencesWindowController: NSWindowController {
         
         // Title
         let titleLabel = NSTextField(labelWithString: "Clipy Preferences")
-        titleLabel.font = NSFont.boldSystemFont(ofSize: 16)
+        titleLabel.styleAsTitleLabel()
         stackView.addArrangedSubview(titleLabel)
         
         // History Settings Section
         let historyLabel = NSTextField(labelWithString: "History Settings")
-        historyLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        historyLabel.styleAsSectionHeader()
         stackView.addArrangedSubview(historyLabel)
         
         // Max History Size
@@ -94,6 +95,13 @@ class PreferencesWindowController: NSWindowController {
         maxHistorySizeField.target = self
         maxHistorySizeField.action = #selector(maxHistorySizeChanged(_:))
         stackView.addArrangedSubview(historySizeView.container)
+        
+        // Number of Recent Items to Show
+        let recentItemsView = createLabeledField("Recent Items to Show:", width: 180)
+        recentItemsView.field.integerValue = UserDefaults.standard.integer(forKey: Constants.UserDefaults.numberOfRecentItemsToShow)
+        recentItemsView.field.target = self
+        recentItemsView.field.action = #selector(recentItemsToShowChanged(_:))
+        stackView.addArrangedSubview(recentItemsView.container)
         
         // Menu Item Title Length
         let titleLengthView = createLabeledField("Menu Title Length:", width: 180)
@@ -111,7 +119,7 @@ class PreferencesWindowController: NSWindowController {
         
         // Display Options Section
         let displayLabel = NSTextField(labelWithString: "Display Options")
-        displayLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        displayLabel.styleAsSectionHeader()
         stackView.addArrangedSubview(displayLabel)
         
         // Checkboxes with proper spacing
@@ -126,7 +134,7 @@ class PreferencesWindowController: NSWindowController {
         
         // Sound Settings Section
         let soundLabel = NSTextField(labelWithString: "Sound Settings")
-        soundLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        soundLabel.styleAsSectionHeader()
         stackView.addArrangedSubview(soundLabel)
         
         soundEffectCheckbox = NSButton(checkboxWithTitle: "Enable sound effects", target: self, action: #selector(soundEffectToggled(_:)))
@@ -141,7 +149,7 @@ class PreferencesWindowController: NSWindowController {
         
         // Timing Settings Section
         let timingLabel = NSTextField(labelWithString: "Timing Settings")
-        timingLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        timingLabel.styleAsSectionHeader()
         stackView.addArrangedSubview(timingLabel)
         
         // Time Interval
@@ -154,7 +162,7 @@ class PreferencesWindowController: NSWindowController {
         
         // Launch at Login Section
         let loginLabel = NSTextField(labelWithString: "Startup Settings")
-        loginLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        loginLabel.styleAsSectionHeader()
         stackView.addArrangedSubview(loginLabel)
         
         launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch at login", target: self, action: #selector(launchAtLoginToggled(_:)))
@@ -162,7 +170,7 @@ class PreferencesWindowController: NSWindowController {
         
         // Reset Button
         let resetButton = NSButton(title: "Reset to Defaults", target: self, action: #selector(resetToDefaults(_:)))
-        resetButton.bezelStyle = .rounded
+        resetButton.styleAsSecondaryButton()
         stackView.addArrangedSubview(resetButton)
     }
     
@@ -173,10 +181,12 @@ class PreferencesWindowController: NSWindowController {
         
         let labelField = NSTextField(labelWithString: label)
         labelField.translatesAutoresizingMaskIntoConstraints = false
+        labelField.styleAsBodyLabel()
         
         let textField = NSTextField()
         textField.translatesAutoresizingMaskIntoConstraints = false
         textField.stringValue = "20"
+        textField.styleAsTextField()
         
         container.addSubview(labelField)
         container.addSubview(textField)
@@ -200,9 +210,11 @@ class PreferencesWindowController: NSWindowController {
         
         let labelField = NSTextField(labelWithString: "Sound Effect:")
         labelField.translatesAutoresizingMaskIntoConstraints = false
+        labelField.styleAsBodyLabel()
         
         let popupButton = NSPopUpButton()
         popupButton.translatesAutoresizingMaskIntoConstraints = false
+        popupButton.font = UIConstants.Typography.body
         
         // Add all available sound effects to the popup
         for soundType in CPYSoundEffectType.allCases {
@@ -234,12 +246,17 @@ class PreferencesWindowController: NSWindowController {
         
         let labelField = NSTextField(labelWithString: label)
         labelField.translatesAutoresizingMaskIntoConstraints = false
+        labelField.styleAsBodyLabel()
         
         let slider = NSSlider(value: 0.5, minValue: 0.1, maxValue: 2.0, target: nil, action: nil)
         slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.wantsLayer = true
+        slider.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        slider.layer?.cornerRadius = UIConstants.CornerRadius.small
         
         let valueLabel = NSTextField(labelWithString: "0.5")
         valueLabel.translatesAutoresizingMaskIntoConstraints = false
+        valueLabel.styleAsBodyLabel()
         
         container.addSubview(labelField)
         container.addSubview(slider)
@@ -306,6 +323,15 @@ class PreferencesWindowController: NSWindowController {
         let value = max(1, min(200, sender.integerValue))
         sender.integerValue = value
         UserDefaults.standard.set(value, forKey: Constants.UserDefaults.maxHistorySize)
+    }
+    
+    @objc private func recentItemsToShowChanged(_ sender: NSTextField) {
+        let value = max(0, min(50, sender.integerValue))
+        sender.integerValue = value
+        UserDefaults.standard.set(value, forKey: Constants.UserDefaults.numberOfRecentItemsToShow)
+        
+        // Post notification to update menus
+        NotificationCenter.default.post(name: Constants.Notification.clipDataUpdated, object: nil)
     }
     
     @objc private func maxMenuItemTitleLengthChanged(_ sender: NSTextField) {
@@ -474,12 +500,12 @@ class SnippetEditorWindowController: NSWindowController {
         
         // Folder selection
         let folderLabel = NSTextField(labelWithString: "Folders")
-        folderLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        folderLabel.styleAsSectionHeader()
         stackView.addArrangedSubview(folderLabel)
         
         // Snippet list
         let snippetLabel = NSTextField(labelWithString: "Snippets")
-        snippetLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        snippetLabel.styleAsSectionHeader()
         stackView.addArrangedSubview(snippetLabel)
         
         // Table view for snippets
@@ -487,11 +513,15 @@ class SnippetEditorWindowController: NSWindowController {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.borderType = .bezelBorder
+        scrollView.wantsLayer = true
+        scrollView.layer?.cornerRadius = UIConstants.CornerRadius.small
         
         snippetTableView = NSTableView()
         snippetTableView.delegate = self
         snippetTableView.dataSource = self
         snippetTableView.allowsMultipleSelection = true
+        snippetTableView.wantsLayer = true
+        snippetTableView.layer?.cornerRadius = UIConstants.CornerRadius.small
         
         let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         nameColumn.title = "Name"
@@ -509,7 +539,9 @@ class SnippetEditorWindowController: NSWindowController {
         buttonStack.distribution = .fillEqually
         
         addButton = NSButton(title: "Add Snippet", target: self, action: #selector(addSnippet))
+        addButton.styleAsPrimaryButton()
         removeButton = NSButton(title: "Remove", target: self, action: #selector(removeSnippet))
+        removeButton.styleAsSecondaryButton()
         removeButton.isEnabled = false
         
         buttonStack.addArrangedSubview(addButton)
@@ -534,25 +566,32 @@ class SnippetEditorWindowController: NSWindowController {
         
         // Title field
         let titleLabel = NSTextField(labelWithString: "Title")
+        titleLabel.styleAsSectionHeader()
         stackView.addArrangedSubview(titleLabel)
         
         titleTextField = NSTextField()
         titleTextField.placeholderString = "Enter snippet title"
+        titleTextField.styleAsTextField()
         stackView.addArrangedSubview(titleTextField)
         
         // Content field
         let contentLabel = NSTextField(labelWithString: "Content")
+        contentLabel.styleAsSectionHeader()
         stackView.addArrangedSubview(contentLabel)
         
         let contentScrollView = NSScrollView()
         contentScrollView.hasVerticalScroller = true
         contentScrollView.borderType = .bezelBorder
         contentScrollView.translatesAutoresizingMaskIntoConstraints = false
+        contentScrollView.wantsLayer = true
+        contentScrollView.layer?.cornerRadius = UIConstants.CornerRadius.small
         
         contentTextView = NSTextView()
         contentTextView.isEditable = true
         contentTextView.isRichText = false
         contentTextView.font = NSFont.userFixedPitchFont(ofSize: 12)
+        contentTextView.wantsLayer = true
+        contentTextView.layer?.cornerRadius = UIConstants.CornerRadius.small
         
         contentScrollView.documentView = contentTextView
         stackView.addArrangedSubview(contentScrollView)
@@ -560,7 +599,7 @@ class SnippetEditorWindowController: NSWindowController {
         
         // Save button
         saveButton = NSButton(title: "Save Snippet", target: self, action: #selector(saveSnippet))
-        saveButton.bezelStyle = .rounded
+        saveButton.styleAsPrimaryButton()
         saveButton.isEnabled = false
         stackView.addArrangedSubview(saveButton)
     }
@@ -658,20 +697,30 @@ extension SnippetEditorWindowController: NSTableViewDelegate {
         
         let snippet = folder.snippets[row]
         
-        let cellView = NSTableCellView()
-        cellView.identifier = NSUserInterfaceItemIdentifier("snippetCell")
+        // Reuse or create a new cell view
+        let identifier = NSUserInterfaceItemIdentifier("snippetCell")
+        var cellView = tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView
         
-        let textField = NSTextField(labelWithString: snippet.title)
-        textField.translatesAutoresizingMaskIntoConstraints = false
-        cellView.addSubview(textField)
+        if cellView == nil {
+            cellView = NSTableCellView()
+            cellView?.identifier = identifier
+            
+            let textField = NSTextField(labelWithString: "")
+            textField.translatesAutoresizingMaskIntoConstraints = false
+            cellView?.addSubview(textField)
+            
+            NSLayoutConstraint.activate([
+                textField.leadingAnchor.constraint(equalTo: (cellView?.leadingAnchor)!),
+                textField.trailingAnchor.constraint(equalTo: (cellView?.trailingAnchor)!),
+                textField.centerYAnchor.constraint(equalTo: (cellView?.centerYAnchor)!)
+            ])
+            
+            cellView?.textField = textField
+        }
         
-        NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 5),
-            textField.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -5),
-            textField.centerYAnchor.constraint(equalTo: cellView.centerYAnchor)
-        ])
+        cellView?.textField?.stringValue = snippet.title
+        cellView?.textField?.styleAsBodyLabel()
         
-        cellView.textField = textField
         return cellView
     }
     

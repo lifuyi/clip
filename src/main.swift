@@ -33,9 +33,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.title = "📋"
             button.action = #selector(statusBarButtonClicked)
             button.target = self
+            // Add some styling to the status bar button
+            button.wantsLayer = true
+            button.layer?.cornerRadius = 4
         }
         
         mainMenu = NSMenu(title: Constants.Application.name)
+        // Add styling to the main menu
+        mainMenu.autoenablesItems = false
         updateMainMenu()
         statusItem.menu = mainMenu
     }
@@ -67,21 +72,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func addHistorySection() {
         let clips = ClipService.shared.getAllClips()
-        let maxInlineItems = UserDefaults.standard.integer(forKey: Constants.UserDefaults.numberOfItemsPlaceInline)
+        let numberOfRecentItems = UserDefaults.standard.integer(forKey: Constants.UserDefaults.numberOfRecentItemsToShow)
         
         if clips.isEmpty {
             let emptyItem = NSMenuItem(title: "No clipboard history", action: nil)
             emptyItem.isEnabled = false
             mainMenu.addItem(emptyItem)
         } else {
-            let itemsToShow = Array(clips.prefix(maxInlineItems))
+            // Show recent items directly in the main menu based on the preference
+            let itemsToShow = Array(clips.prefix(max(0, numberOfRecentItems)))
             
             for (index, clip) in itemsToShow.enumerated() {
                 let menuItem = createMenuItem(for: clip, index: index)
                 mainMenu.addItem(menuItem)
             }
             
-            if clips.count > maxInlineItems {
+            // If we have more items than what we show inline, add a "History" submenu for the rest
+            if clips.count > numberOfRecentItems && numberOfRecentItems >= 0 {
                 mainMenu.addItem(NSMenuItem.separator())
                 let historySubmenu = MenuManager.shared.createHistoryMenu()
                 let historyItem = NSMenuItem(title: "History", action: nil)
@@ -133,6 +140,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let startWithZero = UserDefaults.standard.bool(forKey: Constants.UserDefaults.menuItemsTitleStartWithZero)
             let keyEquivalent = startWithZero ? "\(index)" : "\((index + 1) % 10)"
             menuItem.keyEquivalent = keyEquivalent
+            // Style the key equivalent
+            menuItem.keyEquivalentModifierMask = []
         }
         
         // Add color preview for color codes
@@ -140,6 +149,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let clipData = clip.clipData, let colorImage = clipData.colorCodeImage {
                 menuItem.image = colorImage
             }
+        }
+        
+        // Add a tooltip with the full content
+        if let clipData = clip.clipData, let stringValue = clipData.stringValue {
+            menuItem.toolTip = stringValue
         }
         
         return menuItem
@@ -150,6 +164,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menuItem.representedObject = snippet
         menuItem.target = self
         menuItem.isEnabled = snippet.enable
+        
+        // Add a tooltip with the snippet content
+        menuItem.toolTip = snippet.content
+        
         return menuItem
     }
     
@@ -160,7 +178,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc func selectClipMenuItem(_ sender: NSMenuItem) {
-        guard let clip = sender.representedObject as? CPYClip else { return }
+        print("selectClipMenuItem called")
+        guard let clip = sender.representedObject as? CPYClip else { 
+            print("Failed to get clip from menu item")
+            return 
+        }
+        print("Pasting clip: \(clip.title)")
         PasteService.shared.paste(clip: clip)
     }
     
