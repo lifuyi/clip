@@ -466,9 +466,7 @@ class SnippetEditorWindowController: NSWindowController {
         setupUI()
         
         // Load data asynchronously
-        DispatchQueue.main.async { [weak self] in
-            self?.loadSnippetsAsync()
-        }
+        loadSnippetsAsync()
     }
     
     required init?(coder: NSCoder) {
@@ -483,33 +481,33 @@ class SnippetEditorWindowController: NSWindowController {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             
-            print("DEBUG: loadSnippets() started")
-            
             // Load folders on background thread
             let loadedFolders = SnippetService.shared.getAllFolders()
-            print("DEBUG: Got \(loadedFolders.count) folders")
             
             var foldersToUse = loadedFolders
             
             // If no folders exist, create sample data
             if foldersToUse.isEmpty {
-                print("DEBUG: No folders found, creating sample snippets")
                 self.createSampleSnippets()
                 foldersToUse = SnippetService.shared.getAllFolders()
-                print("DEBUG: After creating samples, got \(foldersToUse.count) folders")
             }
             
             // Update UI on main thread
             DispatchQueue.main.async {
                 self.folders = foldersToUse
                 self.selectedFolder = foldersToUse.first
-                print("DEBUG: Selected folder: \(self.selectedFolder?.title ?? "nil")")
+                
+                // Mark loading as complete BEFORE updating UI
+                self.isLoading = false
                 
                 // Update the UI with the loaded data
                 self.updateFolderPopup()
                 self.updateSnippetList()
-                self.isLoading = false
-                print("DEBUG: loadSnippets() completed")
+                
+                // Ensure we have content in the editor if no snippets exist
+                if self.selectedFolder?.snippets.isEmpty ?? true {
+                    self.clearEditor()
+                }
             }
         }
     }
@@ -551,9 +549,8 @@ class SnippetEditorWindowController: NSWindowController {
         setupHeaderSection(in: mainContainer)
         setupMainContentSection(in: mainContainer)
         
-        // Load initial data and show welcome
-        updateSnippetList()
-        clearEditor()
+        // Load initial data (don't update snippet list or clear editor here, as data will be loaded asynchronously)
+        // The loadSnippetsAsync method will handle updating the UI once data is loaded
     }
     
     private func setupHeaderSection(in container: NSView) {
@@ -844,6 +841,7 @@ class SnippetEditorWindowController: NSWindowController {
         contentTextView = NSTextView()
         contentTextView.isEditable = true
         contentTextView.isRichText = false
+        contentTextView.isSelectable = true // FIX: Ensure text view is selectable
         contentTextView.font = NSFont.userFixedPitchFont(ofSize: 13)
         contentTextView.backgroundColor = NSColor.textBackgroundColor
         contentTextView.insertionPointColor = NSColor.labelColor
@@ -1018,9 +1016,14 @@ class SnippetEditorWindowController: NSWindowController {
         let selectedRowIndexes = snippetTableView.selectedRowIndexes
         guard !selectedRowIndexes.isEmpty else { return }
         
+        // Get the actual snippets to remove using the correct folder reference
+        let currentSnippets = getCurrentSnippets()
         let snippetsToRemove = selectedRowIndexes.compactMap { index in
-            index < getCurrentSnippets().count ? getCurrentSnippets()[index] : nil
+            // Use the current snippets (filtered or not) to get the correct indices
+            index < currentSnippets.count ? currentSnippets[index] : nil
         }
+        
+        guard !snippetsToRemove.isEmpty else { return }
         
         // FIX: Perform removal on background thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -1058,10 +1061,11 @@ class SnippetEditorWindowController: NSWindowController {
                 _ = SnippetService.shared.createSnippet(in: folder, title: title, content: content)
             } else {
                 // Updating existing snippet
+                let currentSnippets = self.getCurrentSnippets()
                 guard let selectedRow = self.snippetTableView.selectedRowIndexes.first,
-                      selectedRow < self.getCurrentSnippets().count else { return }
+                      selectedRow < currentSnippets.count else { return }
                 
-                let snippet = self.getCurrentSnippets()[selectedRow]
+                let snippet = currentSnippets[selectedRow]
                 snippet.title = title
                 snippet.content = content
                 SnippetService.shared.saveSnippetsToDisk()
@@ -1069,8 +1073,17 @@ class SnippetEditorWindowController: NSWindowController {
             
             // Refresh data on main thread
             DispatchQueue.main.async {
+                // Update folders and maintain proper folder reference
                 self.folders = SnippetService.shared.getAllFolders()
+                
+                // Find the updated folder reference by title (simpler approach)
                 self.selectedFolder = self.folders.first { $0.title == folder.title }
+                
+                // Ensure we have a selected folder
+                if self.selectedFolder == nil && !self.folders.isEmpty {
+                    self.selectedFolder = self.folders.first
+                }
+                
                 self.updateSnippetListSafely()
                 self.clearEditor()
                 self.isNewSnippet = false
@@ -1088,6 +1101,7 @@ class SnippetEditorWindowController: NSWindowController {
         
         titleTextField.stringValue = title
         contentTextView.string = content
+        contentTextView.isEditable = true // FIX: Ensure content area is editable when creating new snippet
         isNewSnippet = true
         saveButton.isEnabled = true
         
@@ -1124,15 +1138,32 @@ class SnippetEditorWindowController: NSWindowController {
         let hasTitle = !titleTextField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasContent = !contentTextView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         saveButton.isEnabled = hasTitle && hasContent
+        
+        // FIX: Ensure content area remains editable when there is content
+        if hasContent {
+            contentTextView.isEditable = true
+        }
     }
     
     // FIX: Safe version of updateSnippetList to prevent infinite loops
     private func updateSnippetListSafely() {
-        guard !isLoading else { return }
+        // Use the selected folder if available, otherwise use the first folder
+        let snippetsToDisplay: [CPYSnippet]
+        if let folder = selectedFolder {
+            snippetsToDisplay = folder.snippets
+        } else if let firstFolder = folders.first {
+            snippetsToDisplay = firstFolder.snippets
+        } else {
+            snippetsToDisplay = []
+        }
         
-        filteredSnippets = selectedFolder?.snippets ?? []
+        filteredSnippets = snippetsToDisplay
         snippetTableView.reloadData()
-        updateFolderPopup()
+        
+        // Only update folder popup if we're not in the middle of a folder operation
+        DispatchQueue.main.async { [weak self] in
+            self?.updateFolderPopup()
+        }
     }
     
     private func updateSnippetList() {
@@ -1140,12 +1171,30 @@ class SnippetEditorWindowController: NSWindowController {
     }
     
     private func getCurrentSnippets() -> [CPYSnippet] {
-        return searchField.stringValue.isEmpty ? (selectedFolder?.snippets ?? []) : filteredSnippets
+        // Always use the actual folder's snippets unless we're actively searching
+        guard let selectedFolder = selectedFolder else { 
+            // Fallback to using the folders array if selectedFolder is nil
+            if let firstFolder = folders.first {
+                return firstFolder.snippets
+            }
+            return []
+        }
+        
+        // If we have a search term, use filteredSnippets, otherwise use the folder's snippets
+        if let searchField = searchField, !searchField.stringValue.isEmpty {
+            return filteredSnippets
+        } else {
+            return selectedFolder.snippets
+        }
     }
     
     private func clearEditor() {
+        // Don't clear the editor if we're still loading data
+        guard !isLoading else { return }
+        
         titleTextField.stringValue = ""
         contentTextView.string = getWelcomeMessage()
+        contentTextView.isEditable = true // FIX: Ensure content area remains editable
         saveButton.isEnabled = false
         isNewSnippet = false
     }
@@ -1174,6 +1223,8 @@ class SnippetEditorWindowController: NSWindowController {
     private func updateEditor(with snippet: CPYSnippet) {
         titleTextField.stringValue = snippet.title
         contentTextView.string = snippet.content
+        contentTextView.isEditable = true // FIX: Ensure content area is editable when updating
+        contentTextView.isSelectable = true // FIX: Ensure content area is selectable
         saveButton.isEnabled = true
     }
 }
@@ -1276,9 +1327,14 @@ extension SnippetEditorWindowController: NSTableViewDelegate {
                 clearEditor()
                 removeButton.isEnabled = false
             }
-        } else {
+        } else if selectedRowIndexes.count > 1 {
+            // Multiple selection
             clearEditor()
-            removeButton.isEnabled = selectedRowIndexes.count > 0
+            removeButton.isEnabled = true
+        } else {
+            // No selection
+            clearEditor()
+            removeButton.isEnabled = false
         }
     }
 }
@@ -1292,6 +1348,9 @@ extension SnippetEditorWindowController: NSTextViewDelegate {
     }
     
     @objc private func delayedTextUpdate() {
+        // FIX: Ensure content area remains editable during text changes
+        contentTextView.isEditable = true
+        contentTextView.isSelectable = true
         enableSaveButtonIfNeeded()
     }
 }

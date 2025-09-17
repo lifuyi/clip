@@ -514,9 +514,7 @@ class SnippetService: NSObject {
     
     private override init() {
         super.init()
-        print("DEBUG: SnippetService init() started")
         loadSnippetsFromDisk()
-        print("DEBUG: SnippetService init() completed")
     }
     
     func getAllSnippets() -> [CPYSnippet] {
@@ -580,18 +578,23 @@ class SnippetService: NSObject {
         
         let plistPath = "\(CPYUtilities.applicationSupportFolder())/snippets.plist"
         (foldersData as NSArray).write(toFile: plistPath, atomically: true)
+        
+        // Send notification that snippets have been updated
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Constants.Notification.snippetDataUpdated, object: nil)
+        }
     }
     
     private func loadSnippetsFromDisk() {
-        print("DEBUG: loadSnippetsFromDisk() started")
         let plistPath = "\(CPYUtilities.applicationSupportFolder())/snippets.plist"
-        print("DEBUG: Checking plist at: \(plistPath)")
         guard let foldersData = NSArray(contentsOfFile: plistPath) as? [[String: Any]] else { 
-            print("DEBUG: No existing snippets plist found, creating default folder")
             // Create default folder if none exists
             let defaultFolder = CPYFolder(title: "Default")
             folders.append(defaultFolder)
-            print("DEBUG: Default folder created")
+            // Send notification that snippets have been loaded
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: Constants.Notification.snippetDataUpdated, object: nil)
+            }
             return 
         }
         
@@ -623,6 +626,11 @@ class SnippetService: NSObject {
         }
         
         folders.sort { $0.index < $1.index }
+        
+        // Send notification that snippets have been loaded
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Constants.Notification.snippetDataUpdated, object: nil)
+        }
     }
 }
 

@@ -44,6 +44,7 @@ struct Constants {
     struct Notification {
         static let folderInfoUpdated = NSNotification.Name("FolderInfoUpdated")
         static let clipDataUpdated = NSNotification.Name("ClipDataUpdated")
+        static let snippetDataUpdated = NSNotification.Name("SnippetDataUpdated")
     }
     
     struct SoundEffect {

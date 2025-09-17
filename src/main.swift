@@ -158,6 +158,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             name: Constants.Notification.clipDataUpdated,
             object: nil
         )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(updateMainMenu),
+            name: Constants.Notification.snippetDataUpdated,
+            object: nil
+        )
     }
     
     // MARK: - Menu Management
