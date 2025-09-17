@@ -71,10 +71,21 @@ After building, run the application:
 open Clipy.app
 ```
 
-Or directly:
+Or directly (recommended for best paste functionality):
 ```bash
 ./Clipy.app/Contents/MacOS/Clipy
 ```
+
+### Paste Functionality Notes
+
+For full paste functionality, Clipy requires accessibility permissions. Due to macOS security restrictions, the paste feature works more reliably when running the application directly from the command line rather than using the `open` command.
+
+If paste functionality doesn't work:
+1. Grant accessibility permissions in System Preferences > Security & Privacy > Privacy > Accessibility
+2. Consider running Clipy directly from Terminal for best compatibility
+3. Refer to the `paste_troubleshooting_guide.md` for detailed troubleshooting steps
+
+For comprehensive troubleshooting of paste issues, please see the `paste_troubleshooting_guide.md` file.
 
 ## Usage
 

@@ -24,6 +24,20 @@ if [ $? -eq 0 ]; then
         cp Info.plist Clipy.app/Contents/Info.plist
     fi
     
+    # Copy entitlements file if it exists
+    if [ -f "Clipy.entitlements" ]; then
+        cp Clipy.entitlements Clipy.app/Contents/
+        echo "Entitlements file copied to app bundle"
+        
+        # Try to sign the app with entitlements (if codesign is available)
+        if command -v codesign >/dev/null 2>&1; then
+            echo "Attempting to sign app with entitlements..."
+            codesign --force --sign - --entitlements Clipy.entitlements Clipy.app 2>/dev/null || {
+                echo "Note: Code signing failed (this is normal for debug builds)"
+            }
+        fi
+    fi
+    
     echo "App bundle created at Clipy.app"
     echo ""
     echo "Features implemented:"
@@ -37,13 +51,30 @@ if [ $? -eq 0 ]; then
     echo "✓ Image thumbnail support"
     echo "✓ Numeric keyboard shortcuts"
     echo "✓ Login items integration"
+    echo "✓ Enhanced paste functionality with multiple fallback methods"
     echo ""
-    echo "To run the application:"
+    echo "IMPORTANT: Launch Method for Best Paste Functionality"
+    echo "==========================================================="
+    echo ""
+    echo "For FULL paste functionality (recommended):"
     echo "  ./Clipy.app/Contents/MacOS/Clipy"
-    echo "or"
+    echo ""
+    echo "Alternative method (paste limitations):"
     echo "  open Clipy.app"
+    echo "  → When using 'open', automatic paste may not work due to macOS security"
+    echo "  → Content will still be copied to clipboard for manual paste (⌘+V)"
     echo ""
     echo "The application will appear in your macOS menu bar as 📋"
+    echo ""
+    echo "PASTE FUNCTIONALITY REQUIREMENTS:"
+    echo "- Accessibility permissions (System Preferences > Security & Privacy > Privacy > Accessibility)"
+    echo "- AppleScript permissions (will be prompted automatically)"
+    echo "- For best results: run directly from terminal, not via 'open' command"
+    echo ""
+    echo "If paste doesn't work automatically, the app will:"
+    echo "1. Copy content to clipboard"
+    echo "2. Show notification to press ⌘+V manually"
+    echo "3. Provide guidance on fixing permissions"
 else
     echo "Build failed!"
     exit 1
@@ -51,5 +82,5 @@ fi
 
 if [ "$1" = "run" ]; then
     echo "Starting Clipy..."
-    open Clipy.app
+    ./Clipy.app/Contents/MacOS/Clipy
 fi

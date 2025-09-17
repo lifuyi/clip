@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>Clipy</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.example.Clipy</string>
+	<string>com.clipy.Clipy</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -22,5 +22,18 @@
 	<string>10.12</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Clipy needs to send keystrokes to other applications to paste clipboard content automatically.</string>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>Clipy needs accessibility access to simulate keyboard events for automatic paste functionality.</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSSupportsAutomaticTermination</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+	</dict>
 </dict>
 </plist>

@@ -12,15 +12,8 @@ struct Constants {
     }
     
     struct Menu {
-        static let historyMenuItem = "HistoryMenuItem"
-        static let snippetMenuItem = "SnippetMenuItem"
         static let maxHistorySize = 200
         static let maxMenuItemTitleLength = 15
-    }
-    
-    struct Common {
-        static let bundlePath = "Contents/Info.plist"
-        static let loginItemsEnabledKey = "launchAtLogin"
     }
     
     struct UserDefaults {
@@ -48,39 +41,9 @@ struct Constants {
         static let numberOfRecentItemsToShow = "numberOfRecentItemsToShow" // New preference
     }
     
-    struct Beta {
-        static let pastePasteboardFirst = "pastePasteboardFirst"
-        static let suppressAlertForIdenticalSequentialPastes = "suppressAlertForIdenticalSequentialPastes"
-    }
-    
-    struct Update {
-        static let enableAutomaticCheck = "SUEnableAutomaticChecks"
-        static let checkInterval = "SUScheduledCheckInterval"
-    }
-    
     struct Notification {
-        static let changeDisplayModePreview = NSNotification.Name("ChangeDisplayModePreview")
-        static let changeStoreTypesPreview = NSNotification.Name("ChangeStoreTypesPreview")
-        static let changeMenuIconPreview = NSNotification.Name("ChangeMenuIconPreview")
-        static let changeFolderNamesPreview = NSNotification.Name("ChangeFolderNamesPreview")
         static let folderInfoUpdated = NSNotification.Name("FolderInfoUpdated")
         static let clipDataUpdated = NSNotification.Name("ClipDataUpdated")
-    }
-    
-    struct Xml {
-        static let kXMLStringEncoding = "UTF-8"
-        static let kXMLFileExtension = "cpyxml"
-        static let kRootElement = "clips"
-        static let kSnippetsElement = "snippets"
-        static let kSnippetElement = "snippet"
-        static let kFoldersElement = "folders"
-        static let kFolderElement = "folder"
-    }
-    
-    struct HotKey {
-        static let mainKeyCombo = "MainKeyCombo"
-        static let historyKeyCombo = "HistoryKeyCombo"
-        static let snippetKeyCombo = "SnippetKeyCombo"
     }
     
     struct SoundEffect {

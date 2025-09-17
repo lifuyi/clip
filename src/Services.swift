@@ -22,17 +22,7 @@ class ClipService: NSObject {
         let interval = UserDefaults.standard.double(forKey: Constants.UserDefaults.timeInterval)
         let actualInterval = interval > 0 ? interval : 0.5
         
-        // Debug logging to file
-        let debugLog = "Starting clipboard monitoring with interval: \(actualInterval)s, initial change count: \(lastChangeCount)"
-        logToFile(debugLog)
         
-        // Log initial pasteboard state
-        if let types = pasteboard.types {
-            logToFile("Initial pasteboard types: \(types)")
-        }
-        if let string = pasteboard.string(forType: .string) {
-            logToFile("Initial pasteboard string content (first 100 chars): \(String(string.prefix(100)))")
-        }
         
         // Stop any existing timer
         timer?.invalidate()
@@ -44,30 +34,11 @@ class ClipService: NSObject {
         
         if let timer = timer {
             RunLoop.main.add(timer, forMode: .common)
-            logToFile("Timer scheduled on main run loop")
         }
         
         // Perform initial clipboard check
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.checkClipboard()
-        }
-    }
-    
-    private func logToFile(_ message: String) {
-        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .medium)
-        let logMessage = "[\(timestamp)] \(message)\n"
-        let logPath = "\(CPYUtilities.applicationSupportFolder())/debug.log"
-        
-        if let data = logMessage.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: logPath) {
-                if let fileHandle = FileHandle(forWritingAtPath: logPath) {
-                    fileHandle.seekToEndOfFile()
-                    fileHandle.write(data)
-                    fileHandle.closeFile()
-                }
-            } else {
-                try? data.write(to: URL(fileURLWithPath: logPath))
-            }
         }
     }
     
@@ -79,58 +50,28 @@ class ClipService: NSObject {
     private func checkClipboard() {
         let pasteboard = NSPasteboard.general
         let currentChangeCount = pasteboard.changeCount
-        logToFile("Checking clipboard - current: \(currentChangeCount), last: \(lastChangeCount)")
-        
-        // Additional debugging info
-        if let types = pasteboard.types {
-            logToFile("Current pasteboard types: \(types)")
-        } else {
-            logToFile("Could not get pasteboard types")
-        }
-        
-        if let string = pasteboard.string(forType: .string) {
-            logToFile("Current pasteboard string content (first 100 chars): \(String(string.prefix(100)))")
-        } else {
-            logToFile("No string content in pasteboard")
-        }
         
         if currentChangeCount != lastChangeCount {
-            logToFile("Clipboard change detected!")
             lastChangeCount = currentChangeCount
             handleClipboardChange()
-        } else {
-            logToFile("No clipboard change detected")
         }
     }
     
     private func handleClipboardChange() {
-        logToFile("Handling clipboard change...")
-        
-        // Debug current settings
-        let currentMaxSize = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxHistorySize)
-        let timeInterval = UserDefaults.standard.double(forKey: Constants.UserDefaults.timeInterval)
-        logToFile("Current settings - maxHistorySize: \(currentMaxSize), timeInterval: \(timeInterval)")
-        
         let pasteboard = NSPasteboard.general
         
         // Safely get pasteboard types
         guard let pasteboardTypes = pasteboard.types else {
-            logToFile("No pasteboard types available")
             return
         }
         
-        logToFile("Available pasteboard types: \(pasteboardTypes)")
         let availableTypes = pasteboardTypes.filter { CPYClipData.availableTypes.contains($0) }
-        
-        logToFile("Supported types: \(availableTypes)")
         guard !availableTypes.isEmpty else { 
-            logToFile("No supported types found")
             return 
         }
         
         // Check if we should exclude this app
         if shouldExcludeCurrentApp() { 
-            logToFile("Current app is excluded from clipboard monitoring")
             return 
         }
         
@@ -138,9 +79,7 @@ class ClipService: NSObject {
         let clipData: CPYClipData
         do {
             clipData = try createClipDataSafely(pasteboard: pasteboard, types: availableTypes)
-            logToFile("Clip data created successfully")
         } catch {
-            logToFile("Error creating clip data: \(error)")
             return
         }
         
@@ -150,11 +89,9 @@ class ClipService: NSObject {
         lock.unlock()
         
         if isDuplicate {
-            logToFile("Duplicate clip detected, skipping")
             return
         }
         
-        logToFile("Creating new clip object")
         // Create clip object
         let clip = CPYClip(identifier: UUID().uuidString, clipData: clipData)
         
@@ -162,32 +99,25 @@ class ClipService: NSObject {
         defer { lock.unlock() }
         
         clips.insert(clip, at: 0)
-        logToFile("Clip added to history, total clips: \(clips.count)")
         
         // Limit history size
         let maxSize = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxHistorySize)
         let effectiveMaxSize = maxSize > 0 ? maxSize : 20 // Default to 20 if not set or 0
-        logToFile("Max history size: \(maxSize), effective: \(effectiveMaxSize)")
         if clips.count > effectiveMaxSize {
             let clipsToRemove = clips.suffix(clips.count - effectiveMaxSize)
             for clip in clipsToRemove {
                 deleteClipFiles(clip)
             }
             clips = Array(clips.prefix(effectiveMaxSize))
-            logToFile("History truncated to \(clips.count) clips")
         }
         
-        logToFile("Saving clips to disk...")
         saveClipsToDisk()
-        logToFile("Playing sound effect...")
         playSoundEffect()
         
         // Post notification on main thread
         DispatchQueue.main.async {
-            self.logToFile("Posting clipDataUpdated notification")
             NotificationCenter.default.post(name: Constants.Notification.clipDataUpdated, object: nil)
         }
-        logToFile("Clipboard change handling completed")
     }
     
     private func createClipDataSafely(pasteboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) throws -> CPYClipData {
@@ -227,18 +157,11 @@ class ClipService: NSObject {
     private func shouldExcludeCurrentApp() -> Bool {
         guard let currentApp = NSWorkspace.shared.frontmostApplication,
               let bundleIdentifier = currentApp.bundleIdentifier else { 
-            logToFile("Could not get current app or bundle identifier")
             return false 
         }
         
-        logToFile("Current app: \(currentApp.localizedName ?? "Unknown") (\(bundleIdentifier))")
-        
         let excludedApps = UserDefaults.standard.array(forKey: Constants.UserDefaults.excludedApplicationIdentifiers) as? [String] ?? []
-        let isExcluded = excludedApps.contains(bundleIdentifier)
-        if isExcluded {
-            logToFile("Current app is excluded: \(bundleIdentifier)")
-        }
-        return isExcluded
+        return excludedApps.contains(bundleIdentifier)
     }
     
     private func deleteClipFiles(_ clip: CPYClip) {
@@ -377,7 +300,6 @@ class ClipService: NSObject {
                     clipData = unarchiver.decodeObject(of: CPYClipData.self, forKey: NSKeyedArchiveRootObjectKey)
                     unarchiver.finishDecoding()
                 } catch {
-                    logToFile("Error unarchiving clip data: \(error) for identifier \(identifier)")
                     // Skip clips that can't be unarchived
                     continue
                 }
@@ -387,7 +309,6 @@ class ClipService: NSObject {
             
             // Skip if we couldn't unarchive the data
             guard let validClipData = clipData else { 
-                logToFile("Error unarchiving clip data: Could not decode CPYClipData for identifier \(identifier)")
                 continue 
             }
             
@@ -704,99 +625,378 @@ class PasteService: NSObject {
     static let shared = PasteService()
     
     func paste(clip: CPYClip) {
-        print("PasteService.paste(clip:) called with clip: \(clip.title)")
-        
         guard let clipData = clip.clipData else {
-            print("Failed to get clipData from clip")
+            print("DEBUG: No clip data found")
             return
         }
         
         guard let stringValue = clipData.stringValue else {
-            print("No string value in clip data")
+            print("DEBUG: No string value in clip data")
             return
         }
         
-        print("Setting clipboard content: \(stringValue.prefix(100))...")
+        print("DEBUG: Attempting to paste clip: \(clip.title)")
         
         let pasteboard = NSPasteboard.general
-        let changeCountBefore = pasteboard.changeCount
-        print("Pasteboard change count before clear: \(changeCountBefore)")
-        
         pasteboard.clearContents()
-        let changeCountAfterClear = pasteboard.changeCount
-        print("Pasteboard change count after clear: \(changeCountAfterClear)")
         
-        let setResult = pasteboard.setString(stringValue, forType: .string)
-        let changeCountAfterSet = pasteboard.changeCount
-        print("Set string result: \(setResult)")
-        print("Pasteboard change count after set: \(changeCountAfterSet)")
+        _ = pasteboard.setString(stringValue, forType: .string)
         
         // Verify the content was set correctly
         let retrievedString = pasteboard.string(forType: .string)
         if retrievedString == stringValue {
-            print("Successfully set clipboard content")
+            print("DEBUG: Clipboard content set successfully, triggering paste")
             // Now paste the content to the focused application
             performPasteToFocusedApp()
         } else {
-            print("Failed to set clipboard content. Retrieved: \(retrievedString ?? "nil")")
+            print("DEBUG: Failed to set clipboard content")
         }
     }
     
     func paste(snippet: CPYSnippet) {
-        print("PasteService.paste(snippet:) called with snippet: \(snippet.title)")
-        print("Setting clipboard content: \(snippet.content.prefix(100))...")
-        
         let pasteboard = NSPasteboard.general
-        let changeCountBefore = pasteboard.changeCount
-        print("Pasteboard change count before clear: \(changeCountBefore)")
-        
         pasteboard.clearContents()
-        let changeCountAfterClear = pasteboard.changeCount
-        print("Pasteboard change count after clear: \(changeCountAfterClear)")
         
-        let setResult = pasteboard.setString(snippet.content, forType: .string)
-        let changeCountAfterSet = pasteboard.changeCount
-        print("Set string result: \(setResult)")
-        print("Pasteboard change count after set: \(changeCountAfterSet)")
+        _ = pasteboard.setString(snippet.content, forType: .string)
         
         // Verify the content was set correctly
         let retrievedString = pasteboard.string(forType: .string)
         if retrievedString == snippet.content {
-            print("Successfully set clipboard content")
             // Now paste the content to the focused application
             performPasteToFocusedApp()
-        } else {
-            print("Failed to set clipboard content. Retrieved: \(retrievedString ?? "nil")")
         }
     }
     
     private func performPasteToFocusedApp() {
-        print("Performing paste to focused application")
+        print("DEBUG: performPasteToFocusedApp called")
         
-        // Hide the menu first to ensure the previous app regains focus
-        NSMenu.setMenuBarVisible(false)
+        // Check if we have accessibility permissions before proceeding
+        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: false]
+        let accessibilityEnabled = AXIsProcessTrustedWithOptions(options)
         
-        // Add a small delay to allow the menu to close and focus to return to the previous app
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // Simulate ⌘+V keystroke
-            let source = CGEventSource(stateID: .combinedSessionState)
-            
-            // Create Command+V event
-            let vKeyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
-            let vKeyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-            
-            // Set Command key flag
-            vKeyDown?.flags = .maskCommand
-            vKeyUp?.flags = .maskCommand
-            
-            // Post the events
-            if let downEvent = vKeyDown, let upEvent = vKeyUp {
-                downEvent.post(tap: .cghidEventTap)
-                upEvent.post(tap: .cghidEventTap)
-                print("Successfully sent ⌘+V keystroke")
+        // Detect if launched via open command
+        let launchInfo = ProcessInfo.processInfo
+        let isLaunchedViaOpen = launchInfo.environment["__CFBundleIdentifier"] != nil || 
+                               launchInfo.arguments.contains { $0.contains("open") }
+        
+        print("DEBUG: Current accessibility permissions status: \(accessibilityEnabled)")
+        print("DEBUG: Launched via open command: \(isLaunchedViaOpen)")
+        
+        // If launched via open and we don't have full permissions, we'll still try all methods
+        if isLaunchedViaOpen && !accessibilityEnabled {
+            print("DEBUG: Open command launch detected without full permissions - will try all available methods")
+        }
+        
+        // Try AppleScript method first (if permissions are granted)
+        if accessibilityEnabled {
+            print("DEBUG: Trying AppleScript method")
+            if performPasteWithAppleScript() {
+                print("DEBUG: AppleScript method successful")
+                return
             } else {
-                print("Failed to create keyboard events")
+                print("DEBUG: AppleScript method failed")
             }
+        } else {
+            print("DEBUG: Skipping AppleScript due to missing accessibility permissions")
+        }
+        
+        // Fallback to CGEvent method
+        // Hide the application to ensure the previous app regains focus
+        NSApp.hide(nil)
+        print("DEBUG: App hidden")
+        
+        // Add a longer delay to allow proper focus transition
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            print("DEBUG: Starting keyboard simulation")
+            
+            // Try multiple approaches for keyboard simulation
+            
+            // Method 1: HID Event Tap (most reliable)
+            print("DEBUG: Trying HID Event Tap method")
+            if self?.simulatePasteWithHIDEventTap() == true {
+                print("DEBUG: HID Event Tap method successful")
+                return
+            }
+            
+            // Method 2: CGEvent with combined session
+            print("DEBUG: Trying CGEvent combined session method")
+            if self?.simulatePasteWithCGEventCombined() == true {
+                print("DEBUG: CGEvent combined session method successful")
+                return
+            }
+            
+            // Method 3: Alternative timing approach
+            print("DEBUG: Trying alternative timing method")
+            if self?.simulatePasteWithAlternativeTiming() == true {
+                print("DEBUG: Alternative timing method successful")
+                return
+            }
+            
+            // Method 4: Direct notification (last resort)
+            print("DEBUG: All keyboard methods failed, showing notification")
+            self?.showManualPasteNotification()
+        }
+    }
+    
+    private func performPasteWithAppleScript() -> Bool {
+        print("DEBUG: Attempting AppleScript paste method")
+        
+        // Hide the app first to ensure focus returns to the target application
+        NSApp.hide(nil)
+        
+        // Use a shorter delay for better responsiveness
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let script = """
+            tell application "System Events"
+                keystroke "v" using command down
+            end tell
+            """
+            
+            var error: NSDictionary?
+            guard let scriptObject = NSAppleScript(source: script) else {
+                print("DEBUG: Failed to create AppleScript object, trying backup methods")
+                self.performBackupPasteMethods()
+                return
+            }
+            
+            print("DEBUG: AppleScript object created, executing...")
+            _ = scriptObject.executeAndReturnError(&error)
+            
+            if let error = error {
+                print("DEBUG: AppleScript error: \(error)")
+                print("DEBUG: AppleScript error number: \(error["NSAppleScriptErrorNumber"] ?? "unknown")")
+                
+                // If AppleScript fails, immediately try backup methods
+                print("DEBUG: AppleScript failed, trying backup methods")
+                self.performBackupPasteMethods()
+            } else {
+                print("DEBUG: AppleScript executed successfully")
+            }
+        }
+        
+        return true
+    }
+    
+    private func performBackupPasteMethods() {
+        print("DEBUG: Performing backup paste methods")
+        
+        // Method 1: HID Event Tap (most reliable)
+        print("DEBUG: Trying HID Event Tap method")
+        if simulatePasteWithHIDEventTap() {
+            print("DEBUG: HID Event Tap method successful")
+            return
+        }
+        
+        // Method 2: CGEvent with combined session
+        print("DEBUG: Trying CGEvent combined session method")
+        if simulatePasteWithCGEventCombined() {
+            print("DEBUG: CGEvent combined session method successful")
+            return
+        }
+        
+        // Method 3: Alternative timing approach
+        print("DEBUG: Trying alternative timing method")
+        if simulatePasteWithAlternativeTiming() {
+            print("DEBUG: Alternative timing method successful")
+            return
+        }
+        
+        // Method 4: Try one more aggressive approach
+        print("DEBUG: Trying final aggressive paste method")
+        performAggressivePaste()
+    }
+    
+    private func simulatePasteWithHIDEventTap() -> Bool {
+        print("DEBUG: Using HID Event Tap method")
+        
+        guard let source = CGEventSource(stateID: .combinedSessionState) else {
+            print("DEBUG: Failed to create event source")
+            return false
+        }
+        
+        guard let vKeyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+              let vKeyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+            print("DEBUG: Failed to create keyboard events")
+            return false
+        }
+        
+        vKeyDown.flags = CGEventFlags.maskCommand
+        vKeyUp.flags = CGEventFlags.maskCommand
+        
+        print("DEBUG: Posting HID events")
+        vKeyDown.post(tap: CGEventTapLocation.cghidEventTap)
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            vKeyUp.post(tap: CGEventTapLocation.cghidEventTap)
+        }
+        
+        return true
+    }
+    
+    private func simulatePasteWithCGEventCombined() -> Bool {
+        print("DEBUG: Using CGEvent combined session method")
+        
+        guard let source = CGEventSource(stateID: .combinedSessionState) else {
+            print("DEBUG: Failed to create combined session source")
+            return false
+        }
+        
+        guard let vKeyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+              let vKeyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+            print("DEBUG: Failed to create keyboard events")
+            return false
+        }
+        
+        vKeyDown.flags = CGEventFlags.maskCommand
+        vKeyUp.flags = CGEventFlags.maskCommand
+        
+        print("DEBUG: Posting CGEvent combined session events to multiple taps")
+        
+        // Try posting to multiple event tap locations for better compatibility
+        let tapLocations: [CGEventTapLocation] = [
+            .cghidEventTap,
+            .cgSessionEventTap,
+            .cgAnnotatedSessionEventTap
+        ]
+        
+        for tap in tapLocations {
+            vKeyDown.post(tap: tap)
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            for tap in tapLocations {
+                vKeyUp.post(tap: tap)
+            }
+        }
+        
+        return true
+    }
+    
+    private func simulatePasteWithCGEventPrivate() -> Bool {
+        print("DEBUG: Using CGEvent alternative session method")
+        
+        // Use combined session state with different timing
+        guard let source = CGEventSource(stateID: .combinedSessionState) else {
+            print("DEBUG: Failed to create alternative session source")
+            return false
+        }
+        
+        guard let vKeyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+              let vKeyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+            print("DEBUG: Failed to create keyboard events")
+            return false
+        }
+        
+        vKeyDown.flags = CGEventFlags.maskCommand
+        vKeyUp.flags = CGEventFlags.maskCommand
+        
+        print("DEBUG: Posting CGEvent alternative session events")
+        vKeyDown.post(tap: CGEventTapLocation.cghidEventTap)
+        
+        // Use longer delay for this method
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            vKeyUp.post(tap: CGEventTapLocation.cghidEventTap)
+        }
+        
+        return true
+    }
+    
+    private func simulatePasteWithAlternativeTiming() -> Bool {
+        print("DEBUG: Using alternative timing method")
+        
+        guard let source = CGEventSource(stateID: .combinedSessionState) else {
+            print("DEBUG: Failed to create alternative session source")
+            return false
+        }
+        
+        guard let vKeyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+              let vKeyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+            print("DEBUG: Failed to create keyboard events")
+            return false
+        }
+        
+        vKeyDown.flags = CGEventFlags.maskCommand
+        vKeyUp.flags = CGEventFlags.maskCommand
+        
+        print("DEBUG: Posting CGEvent with longer delays")
+        
+        // Longer initial delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            vKeyDown.post(tap: CGEventTapLocation.cghidEventTap)
+            print("DEBUG: Key down posted with delay")
+            
+            // Longer gap between events
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                vKeyUp.post(tap: CGEventTapLocation.cghidEventTap)
+                print("DEBUG: Key up posted with delay")
+            }
+        }
+        
+        return true
+    }
+    
+    private func performAggressivePaste() {
+        print("DEBUG: Performing aggressive paste - trying multiple approaches simultaneously")
+        
+        // Try multiple event posting locations
+        let eventSources = [
+            CGEventSource(stateID: .combinedSessionState),
+            CGEventSource(stateID: .hidSystemState)
+        ]
+        
+        let eventTaps: [CGEventTapLocation] = [
+            .cghidEventTap,
+            .cgSessionEventTap,
+            .cgAnnotatedSessionEventTap
+        ]
+        
+        for (index, source) in eventSources.enumerated() {
+            guard let source = source else { continue }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.1) {
+                guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+                      let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+                    return
+                }
+                
+                keyDown.flags = .maskCommand
+                keyUp.flags = .maskCommand
+                
+                print("DEBUG: Posting aggressive paste attempt \(index + 1)")
+                
+                for tap in eventTaps {
+                    keyDown.post(tap: tap)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        keyUp.post(tap: tap)
+                    }
+                }
+            }
+        }
+        
+        // If all else fails, at least the content is in clipboard
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            print("DEBUG: All paste attempts completed. Content should be available in clipboard for manual paste.")
+        }
+    }
+    
+    private func showManualPasteNotification() {
+        print("DEBUG: Showing manual paste notification")
+        
+        // Create a user notification
+        let notification = NSUserNotification()
+        notification.title = "Clipy"
+        notification.informativeText = "Content copied to clipboard. Press ⌘+V to paste manually."
+        notification.soundName = nil
+        
+        NSUserNotificationCenter.default.deliver(notification)
+        
+        // Also show a brief alert
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Content Copied"
+            alert.informativeText = "Clipboard content updated. Press ⌘+V to paste."
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
         }
     }
     

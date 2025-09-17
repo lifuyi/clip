@@ -19,7 +19,6 @@ let package = Package(
             sources: [
                 "main.swift",
                 "Constants.swift", 
-                "MenuType.swift",
                 "Extensions.swift",
                 "Models.swift",
                 "Services.swift",

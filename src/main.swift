@@ -2,6 +2,7 @@ import Foundation
 import Cocoa
 import AppKit
 import AudioToolbox
+import ApplicationServices
 
 // Comprehensive clipboard manager application based on Clipy
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -12,12 +13,113 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var snippetEditorWindowController: NSWindowController?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        print("Application did finish launching")
         CPYUtilities.registerUserDefaultKeys()
+        checkAccessibilityPermissions()
         setupMenuBar()
         setupServices()
         setupObservers()
         promptToAddLoginItems()
+    }
+    
+    private func checkAccessibilityPermissions() {
+        // Check if we have accessibility permissions
+        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: false]
+        let accessibilityEnabled = AXIsProcessTrustedWithOptions(options)
+        
+        print("DEBUG: Checking accessibility permissions...")
+        print("DEBUG: AXIsProcessTrustedWithOptions returned: \(accessibilityEnabled)")
+        print("DEBUG: Bundle identifier: \(Bundle.main.bundleIdentifier ?? "unknown")")
+        print("DEBUG: Process ID: \(getpid())")
+        
+        // Check if the app was launched via "open" command (which has different permissions)
+        // More reliable method to detect launch method
+        let launchInfo = ProcessInfo.processInfo
+        let parentProcessID = launchInfo.environment["PPID"] ?? ""
+        let isLaunchedViaOpen = launchInfo.environment["__CFBundleIdentifier"] != nil || 
+                               launchInfo.arguments.contains { $0.contains("open") } ||
+                               parentProcessID.isEmpty == false && getParentProcessName(parentProcessID) == "open"
+        print("DEBUG: Launched via open command: \(isLaunchedViaOpen)")
+        print("DEBUG: Launch arguments: \(launchInfo.arguments)")
+        print("DEBUG: Parent process ID: \(parentProcessID)")
+        
+        if !accessibilityEnabled {
+            print("DEBUG: Accessibility permissions not granted - paste functionality may not work")
+            
+            // Show alert to user with more detailed information
+            let alert = NSAlert()
+            alert.messageText = "Accessibility Permissions Required"
+            if isLaunchedViaOpen {
+                alert.informativeText = "Clipy needs accessibility permissions to paste content into other applications. When launched with 'open', additional permissions may be required.\n\nPlease:\n1. Grant access in System Preferences > Security & Privacy > Privacy > Accessibility\n2. Consider running Clipy directly from Terminal for better compatibility\n3. Restart Clipy after granting permissions"
+            } else {
+                alert.informativeText = "Clipy needs accessibility permissions to paste content into other applications. Please grant access in System Preferences > Security & Privacy > Privacy > Accessibility and restart Clipy."
+            }
+            alert.addButton(withTitle: "Open System Preferences")
+            alert.addButton(withTitle: "Cancel")
+            
+            if alert.runModal() == .alertFirstButtonReturn {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        } else {
+            print("DEBUG: Accessibility permissions granted")
+            
+            // Additional check: try to create a test AppleScript
+            testAppleScriptPermissions()
+        }
+    }
+    
+    private func getParentProcessName(_ ppid: String) -> String? {
+        guard let processID = Int32(ppid) else { return nil }
+        
+        let task = Process()
+        task.launchPath = "/bin/ps"
+        task.arguments = ["-p", String(processID), "-o", "comm="]
+        
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        
+        do {
+            try task.run()
+            task.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return output
+        } catch {
+            print("DEBUG: Failed to get parent process name: \(error)")
+            return nil
+        }
+    }
+    
+    private func testAppleScriptPermissions() {
+        let testScript = """
+        tell application "System Events"
+            return "test"
+        end tell
+        """
+        
+        var error: NSDictionary?
+        guard let scriptObject = NSAppleScript(source: testScript) else {
+            print("DEBUG: Failed to create test AppleScript object")
+            return
+        }
+        
+        _ = scriptObject.executeAndReturnError(&error)
+        
+        if let error = error {
+            print("DEBUG: AppleScript test failed: \(error)")
+            print("DEBUG: Error code: \(error["NSAppleScriptErrorNumber"] ?? "unknown")")
+            print("DEBUG: This suggests AppleEvent permissions are not properly granted")
+            
+            // Check if it's a specific permission error
+            if let errorCode = error["NSAppleScriptErrorNumber"] as? Int, errorCode == -1744 {
+                print("DEBUG: This is a specific AppleEvent permission error (-1744)")
+                print("DEBUG: User may need to grant automation permissions in System Preferences")
+            }
+        } else {
+            print("DEBUG: AppleScript test successful")
+        }
     }
     
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -178,12 +280,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc func selectClipMenuItem(_ sender: NSMenuItem) {
-        print("selectClipMenuItem called")
         guard let clip = sender.representedObject as? CPYClip else { 
-            print("Failed to get clip from menu item")
             return 
         }
-        print("Pasting clip: \(clip.title)")
         PasteService.shared.paste(clip: clip)
     }
     
@@ -229,10 +328,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func terminate() {
         ClipService.shared.stopMonitoring()
         NSApp.terminate(self)
-    }
-    
-    @objc func showMoreClips() {
-        // Implementation for showing more clips in a separate window
     }
     
     // MARK: - Hotkey Actions
