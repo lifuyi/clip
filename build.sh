@@ -17,7 +17,9 @@ if [ $? -eq 0 ]; then
     mkdir -p Clipy.app/Contents/Resources
     
     # Copy the executable
-    cp ./.build/arm64-apple-macosx/debug/Clipy Clipy.app/Contents/MacOS/Clipy
+    # Get the actual build path from swift build
+    BUILD_PATH=$(swift build --show-bin-path)
+    cp "$BUILD_PATH/Clipy" Clipy.app/Contents/MacOS/Clipy
     
     # Copy Info.plist if it doesn't exist
     if [ ! -f "Clipy.app/Contents/Info.plist" ]; then

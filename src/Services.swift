@@ -674,17 +674,29 @@ class PasteService: NSObject {
         let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: false]
         let accessibilityEnabled = AXIsProcessTrustedWithOptions(options)
         
+        // After rebuild, permissions may need to be re-granted due to code signature changes
+        // Check if this is a fresh build by looking for signature differences
+        let isRebuiltApp = checkIfAppWasRecentlyRebuilt()
+        
         // Detect if launched via open command
         let launchInfo = ProcessInfo.processInfo
         let isLaunchedViaOpen = launchInfo.environment["__CFBundleIdentifier"] != nil || 
-                               launchInfo.arguments.contains { $0.contains("open") }
+                               launchInfo.arguments.contains { $0.contains("open") } ||
+                               launchInfo.environment["LAUNCH_METHOD"] == "open"
         
         print("DEBUG: Current accessibility permissions status: \(accessibilityEnabled)")
         print("DEBUG: Launched via open command: \(isLaunchedViaOpen)")
+        print("DEBUG: App was recently rebuilt: \(isRebuiltApp)")
         
         // If launched via open and we don't have full permissions, we'll still try all methods
         if isLaunchedViaOpen && !accessibilityEnabled {
             print("DEBUG: Open command launch detected without full permissions - will try all available methods")
+        }
+        
+        // If app was recently rebuilt, permissions may have been lost due to signature change
+        if isRebuiltApp && !accessibilityEnabled {
+            print("DEBUG: Recently rebuilt app without accessibility permissions - showing permission guidance")
+            showPermissionGuidanceForRebuiltApp()
         }
         
         // Try AppleScript method first (if permissions are granted)
@@ -997,6 +1009,49 @@ class PasteService: NSObject {
             alert.informativeText = "Clipboard content updated. Press ⌘+V to paste."
             alert.addButton(withTitle: "OK")
             alert.runModal()
+        }
+    }
+    
+    private func checkIfAppWasRecentlyRebuilt() -> Bool {
+        // Check if the app bundle was created/modified recently (within last hour)
+        let bundlePath = Bundle.main.bundlePath
+        
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: bundlePath)
+            if let modificationDate = attributes[.modificationDate] as? Date {
+                let oneHourAgo = Date().addingTimeInterval(-3600)
+                return modificationDate > oneHourAgo
+            }
+        } catch {
+            print("DEBUG: Could not check bundle modification date: \(error)")
+        }
+        
+        return false
+    }
+    
+    private func showPermissionGuidanceForRebuiltApp() {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Permissions Required After Rebuild"
+            alert.informativeText = """
+            The app was recently rebuilt and may need accessibility permissions to be re-granted.
+            
+            To restore paste functionality:
+            1. Open System Preferences > Security & Privacy > Privacy > Accessibility
+            2. Remove Clipy from the list if present
+            3. Re-add Clipy by clicking the '+' button
+            4. Restart Clipy for best results
+            
+            Content has been copied to clipboard - you can paste manually with ⌘+V.
+            """
+            alert.addButton(withTitle: "Open System Preferences")
+            alert.addButton(withTitle: "OK")
+            
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                // Open System Preferences to Privacy settings
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+            }
         }
     }
     

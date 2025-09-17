@@ -34,11 +34,19 @@ Clipy is a feature-rich clipboard manager that runs in the macOS menu bar. Based
 - **App Exclusion**: Exclude specific applications from clipboard monitoring
 - **Sound Feedback**: Customizable sound effects for clipboard operations
 
+### Enhanced Paste Functionality
+- **Multiple Paste Methods**: Robust paste implementation with multiple fallback methods
+- **AppleScript Integration**: Primary paste method when accessibility permissions are granted
+- **CGEvent Simulation**: Multiple CGEvent-based paste methods for reliability
+- **Permission Handling**: Comprehensive accessibility and AppleEvent permission checking
+- **Graceful Degradation**: Falls back to clipboard-only operation with user notifications
+
 ### Preferences & Customization
 - **Comprehensive Settings**: Detailed preferences window with multiple panels
 - **Visual Customization**: Configure menu icons, image display, and color previews
 - **Timing Controls**: Adjustable monitoring intervals
 - **Login Items**: Optional launch at login functionality
+- **Sound Effects**: Multiple sound effect options with preview functionality
 
 ## Requirements
 
@@ -67,14 +75,18 @@ swift build
 ## Running the Application
 
 After building, run the application:
-```bash
-open Clipy.app
-```
 
-Or directly (recommended for best paste functionality):
+For FULL paste functionality (recommended):
 ```bash
 ./Clipy.app/Contents/MacOS/Clipy
 ```
+
+Alternative method (paste limitations):
+```bash
+open Clipy.app
+```
+→ When using 'open', automatic paste may not work due to macOS security
+→ Content will still be copied to clipboard for manual paste (⌘+V)
 
 ### Paste Functionality Notes
 
@@ -85,7 +97,17 @@ If paste functionality doesn't work:
 2. Consider running Clipy directly from Terminal for best compatibility
 3. Refer to the `paste_troubleshooting_guide.md` for detailed troubleshooting steps
 
-For comprehensive troubleshooting of paste issues, please see the `paste_troubleshooting_guide.md` file.
+The application will appear in your macOS menu bar as 📋
+
+PASTE FUNCTIONALITY REQUIREMENTS:
+- Accessibility permissions (System Preferences > Security & Privacy > Privacy > Accessibility)
+- AppleScript permissions (will be prompted automatically)
+- For best results: run directly from terminal, not via 'open' command
+
+If paste doesn't work automatically, the app will:
+1. Copy content to clipboard
+2. Show notification to press ⌘+V manually
+3. Provide guidance on fixing permissions
 
 ## Usage
 
@@ -109,13 +131,14 @@ For comprehensive troubleshooting of paste issues, please see the `paste_trouble
 
 ## Architecture
 
-The application follows modern Swift development patterns:
+The application follows modern Swift development patterns with a service-oriented architecture:
 
 - **Constants.swift**: Application-wide configuration and constants
 - **Models.swift**: Data models for clips, snippets, folders, and app info
 - **Services.swift**: Core business logic services (ClipService, MenuManager, SnippetService, PasteService)
 - **Extensions.swift**: Useful extensions for system types and utilities
 - **PreferencesWindow.swift**: UI controllers for preferences and snippet editor
+- **UIConstants.swift**: UI styling constants and extensions
 - **main.swift**: Application delegate and main menu management
 
 ## Data Storage
@@ -126,43 +149,14 @@ The application follows modern Swift development patterns:
 - Automatic cleanup of old data files
 - Thread-safe file operations with proper locking
 
-## Technical Features
+## Development Conventions
 
-### Service Architecture
-- **ClipService**: Handles clipboard monitoring and data management
-- **MenuManager**: Manages dynamic menu creation and updates
-- **SnippetService**: Handles snippet and folder management
-- **PasteService**: Manages paste operations and event simulation
-
-### Advanced Capabilities
-- **Multi-format Support**: Text, RTF, images, PDFs, file URLs
-- **Smart Paste**: Automatic paste simulation with proper event handling
-- **Memory Optimization**: Efficient storage and retrieval of clipboard data
-- **Error Handling**: Robust error handling and recovery mechanisms
-
-## Implemented Features from Clipy Specification
-
-✅ **Core Features**
-- Comprehensive clipboard monitoring
-- Persistent data storage
-- Advanced menu management
-- Snippet system with folders
-- Preferences system
-
-✅ **Advanced Features**
-- Color code detection and preview
-- Image thumbnail generation
-- Numeric keyboard shortcuts
-- Sound effects and feedback
-- App exclusion system
-- Login items integration
-
-✅ **Architecture Patterns**
-- MVVM architecture
-- Service-oriented design
-- Protocol-oriented programming
-- Reactive-style updates
-- Thread-safe operations
+- Swift-based macOS application using AppKit
+- Service-oriented architecture with clear separation of concerns
+- Reactive-style updates using NotificationCenter
+- Protocol-oriented programming patterns
+- Thread-safe operations for data handling
+- MVVM architecture for UI components
 
 ## License
 

@@ -5,7 +5,7 @@ struct Constants {
     
     struct Application {
         static let name = "Clipy"
-        static let bundleIdentifier = "com.clipy.Clipy"
+        static let bundleIdentifier = "com.example.Clipy"
         static let version = "1.0.0"
         static let githubURL = "https://github.com/Clipy/Clipy"
         static let websiteURL = "https://clipy-app.com"
