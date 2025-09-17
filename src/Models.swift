@@ -110,67 +110,36 @@ class CPYClipData: NSObject, NSCoding, NSSecureCoding {
         // Store raw string values instead of NSPasteboard.PasteboardType
         self.types = types.map { $0.rawValue }
         
-        // Extract string value with safety check
-        self.stringValue = {
-            do {
-                return pasteboard.string(forType: .string)
-            } catch {
-                print("Error reading string from pasteboard: \(error)")
-                return nil
-            }
-        }()
+        // Extract string value
+        self.stringValue = pasteboard.string(forType: .string)
         
-        // Extract RTF data with safety check
-        self.RTFData = {
-            do {
-                return pasteboard.data(forType: .rtf)
-            } catch {
-                print("Error reading RTF from pasteboard: \(error)")
-                return nil
-            }
-        }()
+        // Extract RTF data
+        self.RTFData = pasteboard.data(forType: .rtf)
         
-        // Extract PDF data with safety check
-        self.PDF = {
-            do {
-                return pasteboard.data(forType: .pdf)
-            } catch {
-                print("Error reading PDF from pasteboard: \(error)")
-                return nil
-            }
-        }()
+        // Extract PDF data
+        self.PDF = pasteboard.data(forType: .pdf)
         
-        // Extract image with safety check and memory management
+        // Extract image with memory management
         self.image = {
-            do {
-                guard let imageData = pasteboard.data(forType: .tiff) else { return nil }
-                
-                // Limit image size to prevent memory issues
-                if imageData.count > 50 * 1024 * 1024 { // 50MB limit
-                    print("Image too large, skipping: \(imageData.count) bytes")
-                    return nil
-                }
-                
-                return NSImage(data: imageData)
-            } catch {
-                print("Error reading image from pasteboard: \(error)")
+            guard let imageData = pasteboard.data(forType: .tiff) else { return nil }
+            
+            // Limit image size to prevent memory issues
+            if imageData.count > 50 * 1024 * 1024 { // 50MB limit
+                print("Image too large, skipping: \(imageData.count) bytes")
                 return nil
             }
+            
+            return NSImage(data: imageData)
         }()
         
-        // Extract file URLs with safety check
-        (self.URLs, self.fileNames) = {
-            do {
-                if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
-                    return (urls, urls.map { $0.lastPathComponent })
-                } else {
-                    return (nil, nil)
-                }
-            } catch {
-                print("Error reading URLs from pasteboard: \(error)")
-                return (nil, nil)
-            }
-        }()
+        // Extract file URLs
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
+            self.URLs = urls
+            self.fileNames = urls.map { $0.lastPathComponent }
+        } else {
+            self.URLs = nil
+            self.fileNames = nil
+        }
         
         super.init()
     }
@@ -189,17 +158,17 @@ class CPYClipData: NSObject, NSCoding, NSSecureCoding {
     
     required init?(coder: NSCoder) {
         // Decode types as [String] instead of [NSPasteboard.PasteboardType]
-        guard let types = coder.decodeObject(forKey: "types") as? [String] else {
+        guard let types = coder.decodeObject(of: [NSArray.self, NSString.self], forKey: "types") as? [String] else {
             return nil
         }
         self.types = types
         
-        self.stringValue = coder.decodeObject(forKey: "stringValue") as? String
-        self.RTFData = coder.decodeObject(forKey: "RTFData") as? Data
-        self.PDF = coder.decodeObject(forKey: "PDF") as? Data
-        self.image = coder.decodeObject(forKey: "image") as? NSImage
-        self.fileNames = coder.decodeObject(forKey: "fileNames") as? [String]
-        self.URLs = coder.decodeObject(forKey: "URLs") as? [URL]
+        self.stringValue = coder.decodeObject(of: NSString.self, forKey: "stringValue") as String?
+        self.RTFData = coder.decodeObject(of: NSData.self, forKey: "RTFData") as Data?
+        self.PDF = coder.decodeObject(of: NSData.self, forKey: "PDF") as Data?
+        self.image = coder.decodeObject(of: NSImage.self, forKey: "image") as NSImage?
+        self.fileNames = coder.decodeObject(of: [NSArray.self, NSString.self], forKey: "fileNames") as? [String]
+        self.URLs = coder.decodeObject(of: [NSArray.self, NSURL.self], forKey: "URLs") as? [URL]
         
         super.init()
     }
@@ -248,15 +217,15 @@ class CPYClip: NSObject {
             return nil
         }
         
-        do {
-            if #available(macOS 10.13, *) {
-                return try NSKeyedUnarchiver.unarchivedObject(ofClass: CPYClipData.self, from: data as Data)
-            } else {
-                return NSKeyedUnarchiver.unarchiveObject(with: data as Data) as? CPYClipData
-            }
-        } catch {
-            print("Error unarchiving clip data: \(error)")
-            return nil
+        if #available(macOS 10.13, *) {
+            // Configure unarchiver to allow all classes used in CPYClipData
+            let unarchiver = NSKeyedUnarchiver(forReadingWith: data as Data)
+            unarchiver.requiresSecureCoding = false // Set to false to allow all classes
+            let result = unarchiver.decodeObject(of: CPYClipData.self, forKey: NSKeyedArchiveRootObjectKey)
+            unarchiver.finishDecoding()
+            return result
+        } else {
+            return NSKeyedUnarchiver.unarchiveObject(with: data as Data) as? CPYClipData
         }
     }
     
@@ -316,7 +285,11 @@ class CPYClip: NSObject {
         do {
             let archivedData: Data
             if #available(macOS 10.13, *) {
-                archivedData = try NSKeyedArchiver.archivedData(withRootObject: clipData, requiringSecureCoding: false)
+                // Configure archiver to use secure coding but allow all classes
+                let archiver = NSKeyedArchiver(requiringSecureCoding: false)
+                archiver.encode(clipData, forKey: NSKeyedArchiveRootObjectKey)
+                archiver.finishEncoding()
+                archivedData = archiver.encodedData
             } else {
                 archivedData = NSKeyedArchiver.archivedData(withRootObject: clipData)
             }

@@ -11,12 +11,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var preferencesWindowController: NSWindowController?
     private var snippetEditorWindowController: NSWindowController?
     
-    override func awakeFromNib() {
-        super.awakeFromNib()
-        CPYUtilities.registerUserDefaultKeys()
-    }
-    
     func applicationDidFinishLaunching(_ notification: Notification) {
+        print("Application did finish launching")
+        CPYUtilities.registerUserDefaultKeys()
         setupMenuBar()
         setupServices()
         setupObservers()
@@ -58,7 +55,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     // MARK: - Menu Management
     
-    @objc private func updateMainMenu() {
+    @objc func updateMainMenu() {
         mainMenu.removeAllItems()
         
         // Add main sections
@@ -179,8 +176,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc func showPreferencesWindow() {
         if preferencesWindowController == nil {
-            let storyboard = NSStoryboard(name: "Preferences", bundle: nil)
-            preferencesWindowController = storyboard.instantiateInitialController() as? NSWindowController
+            preferencesWindowController = PreferencesWindowController()
         }
         preferencesWindowController?.showWindow(self)
         preferencesWindowController?.window?.makeKeyAndOrderFront(self)
@@ -188,8 +184,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc func showSnippetEditorWindow() {
         if snippetEditorWindowController == nil {
-            let storyboard = NSStoryboard(name: "SnippetEditor", bundle: nil)
-            snippetEditorWindowController = storyboard.instantiateInitialController() as? NSWindowController
+            snippetEditorWindowController = SnippetEditorWindowController()
         }
         snippetEditorWindowController?.showWindow(self)
         snippetEditorWindowController?.window?.makeKeyAndOrderFront(self)

@@ -33,13 +33,31 @@ extension Bundle {
 // MARK: - NSCoding Archive Utilities
 extension NSCoding {
     func archive() -> Data {
-        return NSKeyedArchiver.archivedData(withRootObject: self)
+        do {
+            if #available(macOS 10.13, *) {
+                return try NSKeyedArchiver.archivedData(withRootObject: self, requiringSecureCoding: false)
+            } else {
+                return NSKeyedArchiver.archivedData(withRootObject: self)
+            }
+        } catch {
+            print("Error archiving object: \(error)")
+            return Data()
+        }
     }
 }
 
 extension Array where Element: NSCoding {
     func archive() -> Data {
-        return NSKeyedArchiver.archivedData(withRootObject: self)
+        do {
+            if #available(macOS 10.13, *) {
+                return try NSKeyedArchiver.archivedData(withRootObject: self, requiringSecureCoding: false)
+            } else {
+                return NSKeyedArchiver.archivedData(withRootObject: self)
+            }
+        } catch {
+            print("Error archiving array: \(error)")
+            return Data()
+        }
     }
 }
 
@@ -82,9 +100,19 @@ extension UserDefaults {
         set(data, forKey: key)
     }
     
-    func archiveDataForKey<T: NSCoding>(_ type: T.Type, key: String) -> T? {
+    func archiveDataForKey<T: NSObject & NSCoding>(_ type: T.Type, key: String) -> T? {
         guard let data = data(forKey: key) else { return nil }
-        return NSKeyedUnarchiver.unarchiveObject(with: data) as? T
+        
+        do {
+            if #available(macOS 10.13, *) {
+                return try NSKeyedUnarchiver.unarchivedObject(ofClass: type, from: data)
+            } else {
+                return NSKeyedUnarchiver.unarchiveObject(with: data) as? T
+            }
+        } catch {
+            print("Error unarchiving data for key \(key): \(error)")
+            return nil
+        }
     }
 }
 
