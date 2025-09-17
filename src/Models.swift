@@ -156,6 +156,19 @@ class CPYClipData: NSObject, NSCoding, NSSecureCoding {
         super.init()
     }
     
+    // Initialize with just types for creating dummy instances
+    init(types: [String]) {
+        self.types = types
+        self.image = nil
+        self.stringValue = nil
+        self.RTFData = nil
+        self.PDF = nil
+        self.fileNames = nil
+        self.URLs = nil
+        
+        super.init()
+    }
+    
     required init?(coder: NSCoder) {
         // Decode types as [String] instead of [NSPasteboard.PasteboardType]
         guard let types = coder.decodeObject(of: [NSArray.self, NSString.self], forKey: "types") as? [String] else {
@@ -208,7 +221,7 @@ class CPYClip: NSObject {
     var title: String
     let dataHash: Int
     let primaryType: NSPasteboard.PasteboardType
-    let updateTime: Date
+    var updateTime: Date
     let thumbnailPath: String?
     let isColorCode: Bool
     
@@ -221,9 +234,14 @@ class CPYClip: NSObject {
             // Configure unarchiver to allow all classes used in CPYClipData
             let unarchiver = NSKeyedUnarchiver(forReadingWith: data as Data)
             unarchiver.requiresSecureCoding = false // Set to false to allow all classes
-            let result = unarchiver.decodeObject(of: CPYClipData.self, forKey: NSKeyedArchiveRootObjectKey)
-            unarchiver.finishDecoding()
-            return result
+            do {
+                let result = unarchiver.decodeObject(of: CPYClipData.self, forKey: NSKeyedArchiveRootObjectKey)
+                unarchiver.finishDecoding()
+                return result
+            } catch {
+                print("Error unarchiving clip data: \(error)")
+                return nil
+            }
         } else {
             return NSKeyedUnarchiver.unarchiveObject(with: data as Data) as? CPYClipData
         }

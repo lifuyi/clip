@@ -15,7 +15,7 @@ struct Constants {
         static let historyMenuItem = "HistoryMenuItem"
         static let snippetMenuItem = "SnippetMenuItem"
         static let maxHistorySize = 20
-        static let maxMenuItemTitleLength = 50
+        static let maxMenuItemTitleLength = 15
     }
     
     struct Common {

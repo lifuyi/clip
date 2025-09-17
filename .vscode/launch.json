@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:MyClipyAppUnified}",
+            "name": "Debug Clipy",
+            "program": "${workspaceFolder:MyClipyAppUnified}/.build/debug/Clipy",
+            "preLaunchTask": "swift: Build Debug Clipy"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:MyClipyAppUnified}",
+            "name": "Release Clipy",
+            "program": "${workspaceFolder:MyClipyAppUnified}/.build/release/Clipy",
+            "preLaunchTask": "swift: Build Release Clipy"
+        }
+    ]
+}

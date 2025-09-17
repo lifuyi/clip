@@ -107,94 +107,87 @@ class ClipService: NSObject {
         logToFile("Handling clipboard change...")
         
         // Debug current settings
-        let maxSize = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxHistorySize)
+        let currentMaxSize = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxHistorySize)
         let timeInterval = UserDefaults.standard.double(forKey: Constants.UserDefaults.timeInterval)
-        logToFile("Current settings - maxHistorySize: \(maxSize), timeInterval: \(timeInterval)")
+        logToFile("Current settings - maxHistorySize: \(currentMaxSize), timeInterval: \(timeInterval)")
         
-        // Wrap the entire operation in a try-catch to prevent crashes
-        do {
-            let pasteboard = NSPasteboard.general
-            
-            // Safely get pasteboard types
-            guard let pasteboardTypes = pasteboard.types else {
-                logToFile("No pasteboard types available")
-                return
-            }
-            
-            logToFile("Available pasteboard types: \(pasteboardTypes)")
-            let availableTypes = pasteboardTypes.filter { CPYClipData.availableTypes.contains($0) }
-            
-            logToFile("Supported types: \(availableTypes)")
-            guard !availableTypes.isEmpty else { 
-                logToFile("No supported types found")
-                return 
-            }
-            
-            // Check if we should exclude this app
-            if shouldExcludeCurrentApp() { 
-                logToFile("Current app is excluded from clipboard monitoring")
-                return 
-            }
-            
-            // Create clip data with error handling
-            let clipData: CPYClipData
-            do {
-                clipData = try createClipDataSafely(pasteboard: pasteboard, types: availableTypes)
-                logToFile("Clip data created successfully")
-            } catch {
-                logToFile("Error creating clip data: \(error)")
-                return
-            }
-            
-            // Check for duplicates
-            lock.lock()
-            let isDuplicate = clips.contains(where: { $0.dataHash == clipData.hash })
-            lock.unlock()
-            
-            if isDuplicate {
-                logToFile("Duplicate clip detected, skipping")
-                return
-            }
-            
-            logToFile("Creating new clip object")
-            // Create clip object
-            let clip = CPYClip(identifier: UUID().uuidString, clipData: clipData)
-            
-            lock.lock()
-            defer { lock.unlock() }
-            
-            clips.insert(clip, at: 0)
-            logToFile("Clip added to history, total clips: \(clips.count)")
-            
-            // Limit history size
-            let maxSize = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxHistorySize)
-            let effectiveMaxSize = maxSize > 0 ? maxSize : 20 // Default to 20 if not set or 0
-            logToFile("Max history size: \(maxSize), effective: \(effectiveMaxSize)")
-            if clips.count > effectiveMaxSize {
-                let clipsToRemove = clips.suffix(clips.count - effectiveMaxSize)
-                for clip in clipsToRemove {
-                    deleteClipFiles(clip)
-                }
-                clips = Array(clips.prefix(effectiveMaxSize))
-                logToFile("History truncated to \(clips.count) clips")
-            }
-            
-            logToFile("Saving clips to disk...")
-            saveClipsToDisk()
-            logToFile("Playing sound effect...")
-            playSoundEffect()
-            
-            // Post notification on main thread
-            DispatchQueue.main.async {
-                self.logToFile("Posting clipDataUpdated notification")
-                NotificationCenter.default.post(name: Constants.Notification.clipDataUpdated, object: nil)
-            }
-            logToFile("Clipboard change handling completed")
-            
-        } catch {
-            logToFile("Clipboard handling error: \(error)")
-            print("Clipboard handling error: \(error)")
+        let pasteboard = NSPasteboard.general
+        
+        // Safely get pasteboard types
+        guard let pasteboardTypes = pasteboard.types else {
+            logToFile("No pasteboard types available")
+            return
         }
+        
+        logToFile("Available pasteboard types: \(pasteboardTypes)")
+        let availableTypes = pasteboardTypes.filter { CPYClipData.availableTypes.contains($0) }
+        
+        logToFile("Supported types: \(availableTypes)")
+        guard !availableTypes.isEmpty else { 
+            logToFile("No supported types found")
+            return 
+        }
+        
+        // Check if we should exclude this app
+        if shouldExcludeCurrentApp() { 
+            logToFile("Current app is excluded from clipboard monitoring")
+            return 
+        }
+        
+        // Create clip data with error handling
+        let clipData: CPYClipData
+        do {
+            clipData = try createClipDataSafely(pasteboard: pasteboard, types: availableTypes)
+            logToFile("Clip data created successfully")
+        } catch {
+            logToFile("Error creating clip data: \(error)")
+            return
+        }
+        
+        // Check for duplicates
+        lock.lock()
+        let isDuplicate = clips.contains(where: { $0.dataHash == clipData.hash })
+        lock.unlock()
+        
+        if isDuplicate {
+            logToFile("Duplicate clip detected, skipping")
+            return
+        }
+        
+        logToFile("Creating new clip object")
+        // Create clip object
+        let clip = CPYClip(identifier: UUID().uuidString, clipData: clipData)
+        
+        lock.lock()
+        defer { lock.unlock() }
+        
+        clips.insert(clip, at: 0)
+        logToFile("Clip added to history, total clips: \(clips.count)")
+        
+        // Limit history size
+        let maxSize = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxHistorySize)
+        let effectiveMaxSize = maxSize > 0 ? maxSize : 20 // Default to 20 if not set or 0
+        logToFile("Max history size: \(maxSize), effective: \(effectiveMaxSize)")
+        if clips.count > effectiveMaxSize {
+            let clipsToRemove = clips.suffix(clips.count - effectiveMaxSize)
+            for clip in clipsToRemove {
+                deleteClipFiles(clip)
+            }
+            clips = Array(clips.prefix(effectiveMaxSize))
+            logToFile("History truncated to \(clips.count) clips")
+        }
+        
+        logToFile("Saving clips to disk...")
+        saveClipsToDisk()
+        logToFile("Playing sound effect...")
+        playSoundEffect()
+        
+        // Post notification on main thread
+        DispatchQueue.main.async {
+            self.logToFile("Posting clipDataUpdated notification")
+            NotificationCenter.default.post(name: Constants.Notification.clipDataUpdated, object: nil)
+        }
+        logToFile("Clipboard change handling completed")
     }
     
     private func createClipDataSafely(pasteboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) throws -> CPYClipData {
@@ -238,7 +231,7 @@ class ClipService: NSObject {
             return false 
         }
         
-        logToFile("Current app: \(currentApp.localizedName) (\(bundleIdentifier))")
+        logToFile("Current app: \(currentApp.localizedName ?? "Unknown") (\(bundleIdentifier))")
         
         let excludedApps = UserDefaults.standard.array(forKey: Constants.UserDefaults.excludedApplicationIdentifiers) as? [String] ?? []
         let isExcluded = excludedApps.contains(bundleIdentifier)
@@ -355,6 +348,9 @@ class ClipService: NSObject {
         let plistPath = "\(CPYUtilities.applicationSupportFolder())/clips.plist"
         guard let clipsData = NSArray(contentsOfFile: plistPath) as? [[String: Any]] else { return }
         
+        // Create a temporary array to hold clips while we load them
+        var loadedClips: [CPYClip] = []
+        
         for clipDict in clipsData {
             guard let identifier = clipDict["identifier"] as? String,
                   let title = clipDict["title"] as? String,
@@ -364,11 +360,61 @@ class ClipService: NSObject {
                   let isColorCode = clipDict["isColorCode"] as? Bool else { continue }
             
             let dataPath = "\(CPYUtilities.applicationSupportFolder())/\(identifier).data"
+            let thumbnailPath = "\(CPYUtilities.applicationSupportFolder())/\(identifier)_thumb.tiff"
+            
+            // Check if the data file exists
             guard FileManager.default.fileExists(atPath: dataPath) else { continue }
             
-            // Create clip object (simplified reconstruction)
-            // In a real implementation, you'd want to properly reconstruct the CPYClip
+            // Try to load the actual clip data to verify it's valid
+            guard let data = NSData(contentsOfFile: dataPath) else { continue }
+            
+            // Try to unarchive the clip data to verify it's valid
+            let clipData: CPYClipData?
+            if #available(macOS 10.13, *) {
+                let unarchiver = NSKeyedUnarchiver(forReadingWith: data as Data)
+                unarchiver.requiresSecureCoding = false
+                do {
+                    clipData = unarchiver.decodeObject(of: CPYClipData.self, forKey: NSKeyedArchiveRootObjectKey)
+                    unarchiver.finishDecoding()
+                } catch {
+                    logToFile("Error unarchiving clip data: \(error) for identifier \(identifier)")
+                    // Skip clips that can't be unarchived
+                    continue
+                }
+            } else {
+                clipData = NSKeyedUnarchiver.unarchiveObject(with: data as Data) as? CPYClipData
+            }
+            
+            // Skip if we couldn't unarchive the data
+            guard let validClipData = clipData else { 
+                logToFile("Error unarchiving clip data: Could not decode CPYClipData for identifier \(identifier)")
+                continue 
+            }
+            
+            // Create a new CPYClip with the valid clip data
+            let clip = CPYClip(identifier: identifier, clipData: validClipData)
+            
+            // Override the properties to match the loaded data from the plist
+            // This ensures we use the correct values that were stored in the plist
+            clip.title = title
+            clip.updateTime = updateTime
+            
+            // Use the variables to avoid warnings
+            _ = dataHash
+            _ = primaryTypeString
+            _ = isColorCode
+            _ = thumbnailPath
+            
+            loadedClips.append(clip)
         }
+        
+        // Sort clips by update time (newest first)
+        loadedClips.sort { $0.updateTime > $1.updateTime }
+        
+        // Assign to the main clips array
+        lock.lock()
+        clips = loadedClips
+        lock.unlock()
     }
 }
 
@@ -471,11 +517,18 @@ class MenuManager: NSObject {
     }
     
     private func createMenuItem(for clip: CPYClip, index: Int) -> NSMenuItem {
+        // Use the AppDelegate's createMenuItem method to ensure consistent behavior
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+            return appDelegate.createMenuItem(for: clip, index: index)
+        }
+        
+        // Fallback to creating the menu item directly if we can't get the AppDelegate
         let maxLength = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxMenuItemTitleLength)
         let title = clip.title.count > maxLength ? String(clip.title.prefix(maxLength)) + "..." : clip.title
         
         let menuItem = NSMenuItem(title: title, action: #selector(AppDelegate.selectClipMenuItem(_:)))
         menuItem.representedObject = clip
+        menuItem.target = NSApp.delegate
         
         // Add numeric key equivalent
         if UserDefaults.standard.bool(forKey: Constants.UserDefaults.addNumericKeyEquivalents) && index < 10 {
@@ -496,8 +549,15 @@ class MenuManager: NSObject {
     }
     
     private func createMenuItem(for snippet: CPYSnippet) -> NSMenuItem {
+        // Use the AppDelegate's createSnippetMenuItem method to ensure consistent behavior
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+            return appDelegate.createSnippetMenuItem(for: snippet)
+        }
+        
+        // Fallback to creating the menu item directly if we can't get the AppDelegate
         let menuItem = NSMenuItem(title: snippet.title, action: #selector(AppDelegate.selectSnippetMenuItem(_:)))
         menuItem.representedObject = snippet
+        menuItem.target = NSApp.delegate
         menuItem.isEnabled = snippet.enable
         return menuItem
     }
@@ -554,7 +614,7 @@ class SnippetService: NSObject {
         }
     }
     
-    private func saveSnippetsToDisk() {
+    func saveSnippetsToDisk() {
         let foldersData = folders.map { folder in
             return [
                 "identifier": folder.identifier,
@@ -587,7 +647,7 @@ class SnippetService: NSObject {
         }
         
         for folderDict in foldersData {
-            guard let identifier = folderDict["identifier"] as? String,
+            guard let _ = folderDict["identifier"] as? String,
                   let title = folderDict["title"] as? String,
                   let enable = folderDict["enable"] as? Bool,
                   let index = folderDict["index"] as? Int,
@@ -598,7 +658,7 @@ class SnippetService: NSObject {
             folder.index = index
             
             for snippetDict in snippetsData {
-                guard let snippetId = snippetDict["identifier"] as? String,
+                guard let _ = snippetDict["identifier"] as? String,
                       let snippetTitle = snippetDict["title"] as? String,
                       let content = snippetDict["content"] as? String,
                       let snippetEnable = snippetDict["enable"] as? Bool,

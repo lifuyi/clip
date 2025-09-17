@@ -384,17 +384,28 @@ class PreferencesWindowController: NSWindowController {
     }
 }
 
-// Simple snippet editor window
+// Snippet editor window with continuous input functionality
 class SnippetEditorWindowController: NSWindowController {
+    private var snippetTableView: NSTableView!
+    private var snippetArrayController: NSArrayController!
+    private var titleTextField: NSTextField!
+    private var contentTextView: NSTextView!
+    private var addButton: NSButton!
+    private var removeButton: NSButton!
+    private var saveButton: NSButton!
+    
+    private var folders: [CPYFolder] = []
+    private var selectedFolder: CPYFolder?
     
     init() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
                              styleMask: [.titled, .closable, .resizable],
                              backing: .buffered,
                              defer: false)
         window.title = "Snippet Editor"
         window.center()
         super.init(window: window)
+        loadSnippets()
         setupUI()
     }
     
@@ -402,17 +413,294 @@ class SnippetEditorWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
     
+    private func loadSnippets() {
+        folders = SnippetService.shared.getAllFolders()
+        if !folders.isEmpty {
+            selectedFolder = folders.first
+        }
+    }
+    
     private func setupUI() {
         guard let contentView = window?.contentView else { return }
         
-        let label = NSTextField(labelWithString: "Snippet Editor - Coming Soon")
-        label.font = NSFont.boldSystemFont(ofSize: 16)
-        label.translatesAutoresizingMaskIntoConstraints = false
+        // Main horizontal stack view
+        let mainStackView = NSStackView()
+        mainStackView.orientation = .horizontal
+        mainStackView.spacing = 10
+        mainStackView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(mainStackView)
         
-        contentView.addSubview(label)
         NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+            mainStackView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
+            mainStackView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            mainStackView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            mainStackView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20)
         ])
+        
+        // Left panel - Folders and snippets list
+        let leftView = NSView()
+        leftView.translatesAutoresizingMaskIntoConstraints = false
+        mainStackView.addArrangedSubview(leftView)
+        leftView.widthAnchor.constraint(equalToConstant: 250).isActive = true
+        
+        // Right panel - Edit area
+        let rightView = NSView()
+        rightView.translatesAutoresizingMaskIntoConstraints = false
+        mainStackView.addArrangedSubview(rightView)
+        
+        // Setup left panel
+        setupLeftPanel(in: leftView)
+        
+        // Setup right panel
+        setupRightPanel(in: rightView)
+        
+        // Load initial data
+        updateSnippetList()
+    }
+    
+    private func setupLeftPanel(in view: NSView) {
+        let stackView = NSStackView()
+        stackView.orientation = .vertical
+        stackView.spacing = 10
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stackView)
+        
+        NSLayoutConstraint.activate([
+            stackView.topAnchor.constraint(equalTo: view.topAnchor),
+            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stackView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        
+        // Folder selection
+        let folderLabel = NSTextField(labelWithString: "Folders")
+        folderLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        stackView.addArrangedSubview(folderLabel)
+        
+        // Snippet list
+        let snippetLabel = NSTextField(labelWithString: "Snippets")
+        snippetLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        stackView.addArrangedSubview(snippetLabel)
+        
+        // Table view for snippets
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+        
+        snippetTableView = NSTableView()
+        snippetTableView.delegate = self
+        snippetTableView.dataSource = self
+        snippetTableView.allowsMultipleSelection = true
+        
+        let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
+        nameColumn.title = "Name"
+        nameColumn.width = 200
+        snippetTableView.addTableColumn(nameColumn)
+        
+        scrollView.documentView = snippetTableView
+        stackView.addArrangedSubview(scrollView)
+        scrollView.heightAnchor.constraint(equalToConstant: 300).isActive = true
+        
+        // Buttons
+        let buttonStack = NSStackView()
+        buttonStack.orientation = .horizontal
+        buttonStack.spacing = 10
+        buttonStack.distribution = .fillEqually
+        
+        addButton = NSButton(title: "Add Snippet", target: self, action: #selector(addSnippet))
+        removeButton = NSButton(title: "Remove", target: self, action: #selector(removeSnippet))
+        removeButton.isEnabled = false
+        
+        buttonStack.addArrangedSubview(addButton)
+        buttonStack.addArrangedSubview(removeButton)
+        
+        stackView.addArrangedSubview(buttonStack)
+    }
+    
+    private func setupRightPanel(in view: NSView) {
+        let stackView = NSStackView()
+        stackView.orientation = .vertical
+        stackView.spacing = 10
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stackView)
+        
+        NSLayoutConstraint.activate([
+            stackView.topAnchor.constraint(equalTo: view.topAnchor),
+            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stackView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        
+        // Title field
+        let titleLabel = NSTextField(labelWithString: "Title")
+        stackView.addArrangedSubview(titleLabel)
+        
+        titleTextField = NSTextField()
+        titleTextField.placeholderString = "Enter snippet title"
+        stackView.addArrangedSubview(titleTextField)
+        
+        // Content field
+        let contentLabel = NSTextField(labelWithString: "Content")
+        stackView.addArrangedSubview(contentLabel)
+        
+        let contentScrollView = NSScrollView()
+        contentScrollView.hasVerticalScroller = true
+        contentScrollView.borderType = .bezelBorder
+        contentScrollView.translatesAutoresizingMaskIntoConstraints = false
+        
+        contentTextView = NSTextView()
+        contentTextView.isEditable = true
+        contentTextView.isRichText = false
+        contentTextView.font = NSFont.userFixedPitchFont(ofSize: 12)
+        
+        contentScrollView.documentView = contentTextView
+        stackView.addArrangedSubview(contentScrollView)
+        contentScrollView.heightAnchor.constraint(equalToConstant: 300).isActive = true
+        
+        // Save button
+        saveButton = NSButton(title: "Save Snippet", target: self, action: #selector(saveSnippet))
+        saveButton.bezelStyle = .rounded
+        saveButton.isEnabled = false
+        stackView.addArrangedSubview(saveButton)
+    }
+    
+    @objc private func addSnippet() {
+        // Create a new snippet with default values
+        if selectedFolder == nil {
+            // Create default folder if none exists
+            let defaultFolder = CPYFolder(title: "Default")
+            folders.append(defaultFolder)
+            selectedFolder = defaultFolder
+            _ = SnippetService.shared.createFolder(title: "Default")
+            return
+        }
+        
+        let newSnippet = CPYSnippet(title: "New Snippet", content: "")
+        if let folder = selectedFolder {
+            folder.addSnippet(newSnippet)
+            updateSnippetList()
+            
+            // Select the new snippet
+            if let index = folder.snippets.firstIndex(of: newSnippet) {
+                snippetTableView.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+                snippetTableView.scrollRowToVisible(index)
+            }
+        }
+    }
+    
+    @objc private func removeSnippet() {
+        guard let folder = selectedFolder else { return }
+        
+        let selectedRowIndexes = snippetTableView.selectedRowIndexes
+        let snippetsToRemove = selectedRowIndexes.map { folder.snippets[$0] }
+        
+        for snippet in snippetsToRemove {
+            folder.removeSnippet(snippet)
+        }
+        
+        updateSnippetList()
+        clearEditor()
+        removeButton.isEnabled = false
+        saveButton.isEnabled = false
+        SnippetService.shared.saveSnippetsToDisk()
+    }
+    
+    @objc private func saveSnippet() {
+        guard let folder = selectedFolder,
+              let selectedRow = snippetTableView.selectedRowIndexes.first,
+              selectedRow < folder.snippets.count else { return }
+        
+        let snippet = folder.snippets[selectedRow]
+        snippet.title = titleTextField.stringValue
+        snippet.content = contentTextView.string
+        
+        // Update the table view
+        snippetTableView.reloadData()
+        
+        // Save to disk
+        SnippetService.shared.saveSnippetsToDisk()
+        
+        // Post notification to update menus
+        NotificationCenter.default.post(name: Constants.Notification.clipDataUpdated, object: nil)
+    }
+    
+    private func updateSnippetList() {
+        snippetTableView.reloadData()
+    }
+    
+    private func clearEditor() {
+        titleTextField.stringValue = ""
+        contentTextView.string = ""
+        saveButton.isEnabled = false
+    }
+    
+    private func updateEditor(with snippet: CPYSnippet) {
+        titleTextField.stringValue = snippet.title
+        contentTextView.string = snippet.content
+        saveButton.isEnabled = true
+    }
+}
+
+// MARK: - NSTableViewDataSource
+extension SnippetEditorWindowController: NSTableViewDataSource {
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        guard let folder = selectedFolder else { return 0 }
+        return folder.snippets.count
+    }
+}
+
+// MARK: - NSTableViewDelegate
+extension SnippetEditorWindowController: NSTableViewDelegate {
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        guard let folder = selectedFolder,
+              row < folder.snippets.count else { return nil }
+        
+        let snippet = folder.snippets[row]
+        
+        let cellView = NSTableCellView()
+        cellView.identifier = NSUserInterfaceItemIdentifier("snippetCell")
+        
+        let textField = NSTextField(labelWithString: snippet.title)
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        cellView.addSubview(textField)
+        
+        NSLayoutConstraint.activate([
+            textField.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 5),
+            textField.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -5),
+            textField.centerYAnchor.constraint(equalTo: cellView.centerYAnchor)
+        ])
+        
+        cellView.textField = textField
+        return cellView
+    }
+    
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let folder = selectedFolder else {
+            clearEditor()
+            removeButton.isEnabled = false
+            return
+        }
+        
+        let selectedRowIndexes = snippetTableView.selectedRowIndexes
+        
+        if selectedRowIndexes.count == 1 {
+            let rowIndex = selectedRowIndexes.first!
+            if rowIndex < folder.snippets.count {
+                let snippet = folder.snippets[rowIndex]
+                updateEditor(with: snippet)
+                removeButton.isEnabled = true
+            } else {
+                clearEditor()
+                removeButton.isEnabled = false
+            }
+        } else if selectedRowIndexes.count > 1 {
+            clearEditor()
+            removeButton.isEnabled = true
+            saveButton.isEnabled = false
+        } else {
+            clearEditor()
+            removeButton.isEnabled = false
+        }
     }
 }

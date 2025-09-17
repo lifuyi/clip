@@ -120,7 +120,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(NSMenuItem(title: "Quit", action: #selector(terminate), keyEquivalent: "q"))
     }
     
-    private func createMenuItem(for clip: CPYClip, index: Int) -> NSMenuItem {
+    func createMenuItem(for clip: CPYClip, index: Int) -> NSMenuItem {
         let maxLength = UserDefaults.standard.integer(forKey: Constants.UserDefaults.maxMenuItemTitleLength)
         let title = clip.title.count > maxLength ? String(clip.title.prefix(maxLength)) + "..." : clip.title
         
@@ -142,6 +142,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         
+        return menuItem
+    }
+    
+    func createSnippetMenuItem(for snippet: CPYSnippet) -> NSMenuItem {
+        let menuItem = NSMenuItem(title: snippet.title, action: #selector(selectSnippetMenuItem(_:)))
+        menuItem.representedObject = snippet
+        menuItem.target = self
+        menuItem.isEnabled = snippet.enable
         return menuItem
     }
     
