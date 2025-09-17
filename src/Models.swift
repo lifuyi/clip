@@ -334,6 +334,16 @@ class CPYSnippet: NSObject {
         self.index = 0
         super.init()
     }
+    
+    // New initializer for loading from disk with existing identifier
+    init(identifier: String, title: String, content: String) {
+        self.identifier = identifier
+        self.title = title
+        self.content = content
+        self.enable = true
+        self.index = 0
+        super.init()
+    }
 }
 
 // MARK: - CPYFolder
@@ -346,6 +356,16 @@ class CPYFolder: NSObject {
     
     init(title: String) {
         self.identifier = UUID().uuidString
+        self.title = title
+        self.enable = true
+        self.index = 0
+        self.snippets = []
+        super.init()
+    }
+    
+    // New initializer for loading from disk with existing identifier
+    init(identifier: String, title: String) {
+        self.identifier = identifier
         self.title = title
         self.enable = true
         self.index = 0

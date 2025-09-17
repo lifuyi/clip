@@ -514,7 +514,9 @@ class SnippetService: NSObject {
     
     private override init() {
         super.init()
+        print("DEBUG: SnippetService init() started")
         loadSnippetsFromDisk()
+        print("DEBUG: SnippetService init() completed")
     }
     
     func getAllSnippets() -> [CPYSnippet] {
@@ -581,33 +583,37 @@ class SnippetService: NSObject {
     }
     
     private func loadSnippetsFromDisk() {
+        print("DEBUG: loadSnippetsFromDisk() started")
         let plistPath = "\(CPYUtilities.applicationSupportFolder())/snippets.plist"
+        print("DEBUG: Checking plist at: \(plistPath)")
         guard let foldersData = NSArray(contentsOfFile: plistPath) as? [[String: Any]] else { 
+            print("DEBUG: No existing snippets plist found, creating default folder")
             // Create default folder if none exists
             let defaultFolder = CPYFolder(title: "Default")
             folders.append(defaultFolder)
+            print("DEBUG: Default folder created")
             return 
         }
         
         for folderDict in foldersData {
-            guard let _ = folderDict["identifier"] as? String,
+            guard let identifier = folderDict["identifier"] as? String,
                   let title = folderDict["title"] as? String,
                   let enable = folderDict["enable"] as? Bool,
                   let index = folderDict["index"] as? Int,
                   let snippetsData = folderDict["snippets"] as? [[String: Any]] else { continue }
             
-            let folder = CPYFolder(title: title)
+            let folder = CPYFolder(identifier: identifier, title: title)
             folder.enable = enable
             folder.index = index
             
             for snippetDict in snippetsData {
-                guard let _ = snippetDict["identifier"] as? String,
+                guard let identifier = snippetDict["identifier"] as? String,
                       let snippetTitle = snippetDict["title"] as? String,
                       let content = snippetDict["content"] as? String,
                       let snippetEnable = snippetDict["enable"] as? Bool,
                       let snippetIndex = snippetDict["index"] as? Int else { continue }
                 
-                let snippet = CPYSnippet(title: snippetTitle, content: content)
+                let snippet = CPYSnippet(identifier: identifier, title: snippetTitle, content: content)
                 snippet.enable = snippetEnable
                 snippet.index = snippetIndex
                 folder.snippets.append(snippet)
